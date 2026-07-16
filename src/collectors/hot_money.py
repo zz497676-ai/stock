@@ -24,16 +24,19 @@ def collect(trade_date: date) -> CollectorResult:
     # 当日龙虎榜个股明细
     lhb = cached_fetch("stock_lhb_detail_em", start_date=ds, end_date=ds)
     if lhb is not None and not lhb.empty:
-        net = pd.to_numeric(lhb["龙虎榜净买额"], errors="coerce")
-        turnover = pd.to_numeric(lhb["龙虎榜成交额"], errors="coerce")
-        r.metrics["lhb_stock_count"] = int(lhb["代码"].nunique())
+        # 同一股票会因多个上榜原因重复出现,先按代码去重再统计
+        dedup = lhb.drop_duplicates(subset=["代码"]).copy()
+        net = pd.to_numeric(dedup["龙虎榜净买额"], errors="coerce")
+        turnover = pd.to_numeric(dedup["龙虎榜成交额"], errors="coerce")
+        r.metrics["lhb_stock_count"] = int(dedup["代码"].nunique())
         r.metrics["lhb_net_buy"] = float(net.sum())
         r.metrics["lhb_turnover"] = float(turnover.sum())
 
-        top = lhb.assign(_net=net).sort_values("_net", ascending=False)
+        top = dedup.assign(_net=net).sort_values("_net", ascending=False)
         cols = ["代码", "名称", "收盘价", "涨跌幅", "龙虎榜净买额", "上榜原因"]
         show = top[cols].head(8).copy()
         show["龙虎榜净买额"] = pd.to_numeric(show["龙虎榜净买额"], errors="coerce").map(yi)
+        show["涨跌幅"] = pd.to_numeric(show["涨跌幅"], errors="coerce").map(lambda x: f"{x:+.2f}%")
         r.tables.append(("当日龙虎榜净买额前8个股", show))
     elif lhb is not None:
         r.notes.append("当日无个股上榜(或数据未更新)。")

@@ -32,6 +32,8 @@ def analyze_national_team(r: CollectorResult) -> Verdict:
     spikes = r.metrics.get("etf_spike_count")
     chg = r.metrics.get("csi300_chg")
     if spikes is None:
+        if any(k.startswith("turnover_") for k in r.metrics):
+            return Verdict(0, "低", "ETF成交已记录,放量基线累积中(约需一个月),暂不判断方向。")
         return Verdict(None, "低", "ETF数据缺失,无法判断。")
     if spikes >= 2 and chg is not None and chg < -0.5:
         return Verdict(2, "中", "指数下跌且多只宽基ETF放量,符合护盘特征(行为推断)。")

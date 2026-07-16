@@ -89,13 +89,6 @@ def build_mock_data(d: date) -> dict[str, pd.DataFrame]:
         "stock_margin_szse": pd.DataFrame(
             {"融资余额": [8500e8], "融资买入额": [700e8], "融资融券余额": [8700e8]}
         ),
-        "stock_market_fund_flow": pd.DataFrame(
-            {
-                "日期": ds,
-                "小单净流入-净额": [60e8] * (len(ds) - 1) + [85e8],
-                "主力净流入-净额": [-50e8] * (len(ds) - 1) + [-92e8],
-            }
-        ),
         "stock_account_statistics_em": pd.DataFrame(
             {
                 "数据日期": ["2026-05", "2026-06"],
@@ -108,6 +101,7 @@ def build_mock_data(d: date) -> dict[str, pd.DataFrame]:
                 "代码": ["510300", "510050", "588000"],
                 "名称": ["沪深300ETF", "上证50ETF", "科创50ETF"],
                 "最新价": [3.85, 2.71, 1.02],
+                "涨跌幅": [-1.4, -1.1, -2.0],
                 "成交额": [45e8, 20e8, 15e8],
                 "最新份额": [1200e8, 900e8, 800e8],
             }
@@ -121,20 +115,22 @@ def build_mock_data(d: date) -> dict[str, pd.DataFrame]:
                 "成立日期": [(d - timedelta(days=2)).isoformat(), (d - timedelta(days=5)).isoformat()],
             }
         ),
-        # 所有指数/ETF历史行情共用一张表(mock 下无法按 symbol 区分,足够跑通逻辑)
-        "index_zh_a_hist": pd.DataFrame(
+        # 指数实时快照(mock 下所有系列共用一张表,含所需的全部代码)
+        "stock_zh_index_spot_em": pd.DataFrame(
             {
-                "日期": ds,
-                "成交额": [5000e8] * (len(ds) - 1) + [7200e8],
-                "涨跌幅": [0.1] * (len(ds) - 1) + [-1.2],
-                "换手率": [1.5] * len(ds),
+                "代码": ["000300", "000001", "399106", "932000"],
+                "名称": ["沪深300", "上证综指", "深证综指", "中证2000"],
+                "最新价": [4100.0, 3400.0, 2100.0, 2600.0],
+                "涨跌幅": [-1.2, -0.9, -1.5, -2.2],
+                "成交额": [3200e8, 5100e8, 6300e8, 2400e8],
             }
         ),
-        "fund_etf_hist_em": pd.DataFrame(
+        "stock_individual_fund_flow_rank": pd.DataFrame(
             {
-                "日期": ds,
-                "成交额": [20e8] * (len(ds) - 1) + [55e8],
-                "涨跌幅": [0.2] * (len(ds) - 1) + [-1.5],
+                "代码": ["600519", "300750"],
+                "名称": ["贵州茅台", "宁德时代"],
+                "今日小单净流入-净额": [45e8, 40e8],
+                "今日主力净流入-净额": [-50e8, -42e8],
             }
         ),
         "stock_notice_report": pd.DataFrame(

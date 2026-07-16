@@ -66,26 +66,19 @@ def collect(trade_date: date) -> CollectorResult:
             f"全市场融资余额约 {yi(total, 0)}(沪 {yi(bal_parts[0], 0)} + 深 {yi(bal_parts[1], 0)}){chg_txt}。"
         )
 
-    # 大盘资金流:小单净流入代理散户行为
-    flow = cached_fetch("stock_market_fund_flow")
+    # 全市场小单净流入(逐股加总;大盘口径接口在海外 runner 不可用,改用个股排行接口)
+    flow = cached_fetch("stock_individual_fund_flow_rank", indicator="今日")
     if flow is not None and not flow.empty:
-        flow = flow.copy()
-        flow["_d"] = pd.to_datetime(flow["日期"], errors="coerce").dt.date
-        today = flow[flow["_d"] == trade_date]
-        if not today.empty:
-            row = today.iloc[0]
-            small = float(pd.to_numeric(row["小单净流入-净额"], errors="coerce"))
-            main = float(pd.to_numeric(row["主力净流入-净额"], errors="coerce"))
-            r.metrics["small_order_net"] = small
-            r.metrics["main_force_net"] = main
-            r.evidence.append(
-                f"当日大盘小单(散户)净流入 {yi(small)},主力净流入 {yi(main)}"
-                f"(小单流入而主力流出,通常是散户接盘特征)。"
-            )
-        else:
-            r.notes.append("大盘资金流尚未更新到当日。")
+        small = float(pd.to_numeric(flow["今日小单净流入-净额"], errors="coerce").sum())
+        main = float(pd.to_numeric(flow["今日主力净流入-净额"], errors="coerce").sum())
+        r.metrics["small_order_net"] = small
+        r.metrics["main_force_net"] = main
+        r.evidence.append(
+            f"当日全市场小单(散户)净流入合计 {yi(small)},主力净流入合计 {yi(main)}"
+            f"(小单流入而主力流出,通常是散户接盘特征)。"
+        )
     else:
-        r.notes.append("大盘资金流接口今日不可用。")
+        r.notes.append("个股资金流排行接口今日不可用,小单口径缺失。")
 
     # 月度新增开户(低频佐证)
     acct = cached_fetch("stock_account_statistics_em")
