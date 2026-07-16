@@ -1,0 +1,153 @@
+"""--mock 模式假数据:列名与 akshare 1.18 各接口真实返回一致,用于离线跑通全流程。"""
+
+from __future__ import annotations
+
+from datetime import date, timedelta
+
+import pandas as pd
+
+
+def _trading_days_back(d: date, n: int) -> list[date]:
+    out, cur = [], d
+    while len(out) < n:
+        if cur.weekday() < 5:
+            out.append(cur)
+        cur -= timedelta(days=1)
+    return list(reversed(out))
+
+
+def build_mock_data(d: date) -> dict[str, pd.DataFrame]:
+    days = _trading_days_back(d, 30)
+    ds = [x.isoformat() for x in days]
+
+    return {
+        "stock_lhb_detail_em": pd.DataFrame(
+            {
+                "代码": ["600519", "300750", "002131"],
+                "名称": ["贵州茅台", "宁德时代", "利欧股份"],
+                "上榜日": [d.isoformat()] * 3,
+                "收盘价": [1500.0, 210.5, 3.21],
+                "涨跌幅": [3.2, -5.1, 10.02],
+                "龙虎榜净买额": [2.1e8, -3.5e8, 1.2e8],
+                "龙虎榜买入额": [5e8, 2e8, 3e8],
+                "龙虎榜卖出额": [2.9e8, 5.5e8, 1.8e8],
+                "龙虎榜成交额": [7.9e8, 7.5e8, 4.8e8],
+                "上榜原因": ["日涨幅偏离值达7%", "日跌幅偏离值达7%", "连续三个交易日内涨幅偏离值累计20%"],
+            }
+        ),
+        "stock_lhb_hyyyb_em": pd.DataFrame(
+            {
+                "营业部名称": [
+                    "华鑫证券有限责任公司上海分公司",
+                    "东方财富证券股份有限公司拉萨团结路第二证券营业部",
+                    "中信证券股份有限公司上海溧阳路证券营业部",
+                ],
+                "上榜日": [d.isoformat()] * 3,
+                "买入个股数": [5, 12, 3],
+                "卖出个股数": [2, 10, 4],
+                "买入总金额": [4.2e8, 2.8e8, 3.1e8],
+                "卖出总金额": [1.1e8, 2.5e8, 3.8e8],
+                "总买卖净额": [3.1e8, 0.3e8, -0.7e8],
+                "买入股票": ["利欧股份 贵州茅台", "N易联 利欧股份", "宁德时代"],
+            }
+        ),
+        "stock_ggcg_em": pd.DataFrame(
+            {
+                "代码": ["000001", "600036", "002415"],
+                "名称": ["平安银行", "招商银行", "海康威视"],
+                "股东名称": ["平安集团", "招银国际", "龚虹嘉"],
+                "持股变动信息-增减": ["增持", "增持", "减持"],
+                "持股变动信息-变动数量": [1e7, 5e6, -8e6],
+                "持股变动信息-占总股本比例": [0.05, 0.02, 0.09],
+                "公告日": [d.isoformat(), d.isoformat(), d.isoformat()],
+            }
+        ),
+        "stock_repurchase_em": pd.DataFrame(
+            {
+                "股票代码": ["600519", "000333"],
+                "股票简称": ["贵州茅台", "美的集团"],
+                "实施进度": ["回购实施", "回购完成"],
+                "已回购金额": [3e8, 12e8],
+                "最新公告日期": [d.isoformat(), d.isoformat()],
+            }
+        ),
+        "stock_dzjy_sctj": pd.DataFrame(
+            {
+                "交易日期": ds[-5:],
+                "大宗交易成交总额": [80e8, 95e8, 70e8, 110e8, 88e8],
+                "溢价成交总额占比": [12.0, 8.5, 15.2, 22.1, 18.0],
+                "折价成交总额占比": [70.0, 75.0, 68.0, 60.0, 65.0],
+            }
+        ),
+        "stock_margin_sse": pd.DataFrame(
+            {
+                "信用交易日期": [x.strftime("%Y%m%d") for x in days],
+                "融资余额": [9000e8 + i * 10e8 for i in range(len(days))],
+                "融资买入额": [800e8] * len(days),
+            }
+        ),
+        "stock_margin_szse": pd.DataFrame(
+            {"融资余额": [8500e8], "融资买入额": [700e8], "融资融券余额": [8700e8]}
+        ),
+        "stock_market_fund_flow": pd.DataFrame(
+            {
+                "日期": ds,
+                "小单净流入-净额": [60e8] * (len(ds) - 1) + [85e8],
+                "主力净流入-净额": [-50e8] * (len(ds) - 1) + [-92e8],
+            }
+        ),
+        "stock_account_statistics_em": pd.DataFrame(
+            {
+                "数据日期": ["2026-05", "2026-06"],
+                "新增投资者-数量": [120.5, 135.2],
+                "新增投资者-环比": ["+5.2%", "+12.2%"],
+            }
+        ),
+        "fund_etf_spot_em": pd.DataFrame(
+            {
+                "代码": ["510300", "510050", "588000"],
+                "名称": ["沪深300ETF", "上证50ETF", "科创50ETF"],
+                "最新价": [3.85, 2.71, 1.02],
+                "成交额": [45e8, 20e8, 15e8],
+                "最新份额": [1200e8, 900e8, 800e8],
+            }
+        ),
+        "fund_new_found_em": pd.DataFrame(
+            {
+                "基金代码": ["021234", "021235"],
+                "基金简称": ["某某沪深300指数A", "某某灵活配置混合"],
+                "基金类型": ["指数型-股票", "混合型-灵活"],
+                "募集份额": [12.5, 8.0],
+                "成立日期": [(d - timedelta(days=2)).isoformat(), (d - timedelta(days=5)).isoformat()],
+            }
+        ),
+        # 所有指数/ETF历史行情共用一张表(mock 下无法按 symbol 区分,足够跑通逻辑)
+        "index_zh_a_hist": pd.DataFrame(
+            {
+                "日期": ds,
+                "成交额": [5000e8] * (len(ds) - 1) + [7200e8],
+                "涨跌幅": [0.1] * (len(ds) - 1) + [-1.2],
+                "换手率": [1.5] * len(ds),
+            }
+        ),
+        "fund_etf_hist_em": pd.DataFrame(
+            {
+                "日期": ds,
+                "成交额": [20e8] * (len(ds) - 1) + [55e8],
+                "涨跌幅": [0.2] * (len(ds) - 1) + [-1.5],
+            }
+        ),
+        "stock_notice_report": pd.DataFrame(
+            {
+                "代码": ["601628", "600000"],
+                "名称": ["中国人寿", "浦发银行"],
+                "公告标题": [
+                    "中国人寿保险股份有限公司关于举牌某公司股票的公告",
+                    "浦发银行关于股东增持计划的公告",
+                ],
+                "公告类型": ["持股变动", "持股变动"],
+                "公告日期": [d.isoformat(), d.isoformat()],
+                "网址": ["https://example.com/1", "https://example.com/2"],
+            }
+        ),
+    }
