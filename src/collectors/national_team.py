@@ -11,6 +11,7 @@ from datetime import date
 import pandas as pd
 
 from collectors import CollectorResult
+from collectors.market_common import csindex_day
 from utils import cached_fetch, load_config, load_history, rolling_baseline, yi
 
 
@@ -20,14 +21,11 @@ def collect(trade_date: date) -> CollectorResult:
     etfs = cfg["national_team_etfs"]
     threshold = float(cfg.get("national_team_volume_ratio_threshold", 2.0))
 
-    # 沪深300 当日涨跌(实时快照,盘后即收盘值)
-    idx = cached_fetch("stock_zh_index_spot_em", symbol="沪深重要指数")
+    # 沪深300 当日涨跌:优先中证官网;失败时降级用 510300 ETF 涨跌幅作代理
     index_chg = None
-    if idx is not None and not idx.empty:
-        row = idx[idx["代码"].astype(str) == "000300"]
-        if not row.empty:
-            index_chg = float(pd.to_numeric(row.iloc[0]["涨跌幅"], errors="coerce"))
-            r.metrics["csi300_chg"] = index_chg
+    idx = csindex_day("000300", trade_date)
+    if idx is not None:
+        index_chg = idx["chg"]
 
     # ETF 当日成交额(实时快照)+ 历史CSV基线
     spot = cached_fetch("fund_etf_spot_em")
@@ -65,6 +63,15 @@ def collect(trade_date: date) -> CollectorResult:
                     "涨跌幅": f"{chg:+.2f}%",
                 }
             )
+
+    # 中证官网不可用时,用 510300 ETF 涨跌幅近似沪深300
+    if index_chg is None and spot is not None and not spot.empty:
+        proxy = spot[spot["代码"] == "510300"]
+        if not proxy.empty:
+            index_chg = float(pd.to_numeric(proxy.iloc[0]["涨跌幅"], errors="coerce"))
+            r.notes.append("沪深300指数行情不可用,以 510300 ETF 涨跌幅代理。")
+    if index_chg is not None:
+        r.metrics["csi300_chg"] = index_chg
 
     if rows:
         r.tables.append(("汇金系宽基ETF当日成交", pd.DataFrame(rows)))

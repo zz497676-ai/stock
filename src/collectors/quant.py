@@ -1,43 +1,28 @@
 """量化:小微盘(中证2000)成交占全市场比重的异动,作为量化策略活跃度代理。
 
-当日指数数据取自实时快照接口(push2 主机,海外可用),
-20日均值基线由 data/quant.csv 自行累积。
+中证2000 行情取自中证指数官网,全市场成交取自沪深交易所官方概况
+(东财行情主机对海外 runner 不可用),20日均值基线由 data/quant.csv 自行累积。
 """
 
 from __future__ import annotations
 
 from datetime import date
 
-import pandas as pd
-
 from collectors import CollectorResult
-from utils import cached_fetch, load_history, rolling_baseline, yi
-
-
-def _index_row(symbol_group: str, code: str) -> dict | None:
-    df = cached_fetch("stock_zh_index_spot_em", symbol=symbol_group)
-    if df is None or df.empty:
-        return None
-    row = df[df["代码"].astype(str) == code]
-    if row.empty:
-        return None
-    row = row.iloc[0]
-    return {
-        "turnover": float(pd.to_numeric(row["成交额"], errors="coerce")),
-        "chg": float(pd.to_numeric(row["涨跌幅"], errors="coerce")),
-    }
+from collectors.market_common import csindex_day, sse_stock_turnover, szse_stock_turnover
+from utils import load_history, rolling_baseline, yi
 
 
 def collect(trade_date: date) -> CollectorResult:
     r = CollectorResult(key="quant", title="量化资金")
 
-    # 中证2000 代表小微盘 = 量化主要战场;上证综指+深证综指近似全市场成交
-    csi2000 = _index_row("中证系列指数", "932000") or _index_row("上证系列指数", "932000")
-    sh = _index_row("上证系列指数", "000001")
-    sz = _index_row("深证系列指数", "399106")
+    # 中证2000 代表小微盘 = 量化主要战场;沪深交易所股票成交合计 = 全市场
+    csi2000 = csindex_day("932000", trade_date)
+    sh = sse_stock_turnover(trade_date)
+    sz = szse_stock_turnover(trade_date)
 
-    if csi2000 and sh and sz:
-        market_total = sh["turnover"] + sz["turnover"]
+    if csi2000 and csi2000.get("turnover") and sh and sz:
+        market_total = sh + sz
         share = csi2000["turnover"] / market_total * 100 if market_total > 0 else None
         r.metrics["market_turnover"] = market_total
         r.metrics["csi2000_turnover"] = csi2000["turnover"]

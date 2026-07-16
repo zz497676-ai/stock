@@ -86,8 +86,9 @@ def build_mock_data(d: date) -> dict[str, pd.DataFrame]:
                 "融资买入额": [800e8] * len(days),
             }
         ),
+        # 深交所口径:单位亿元
         "stock_margin_szse": pd.DataFrame(
-            {"融资余额": [8500e8], "融资买入额": [700e8], "融资融券余额": [8700e8]}
+            {"融资余额": [8500.0], "融资买入额": [700.0], "融资融券余额": [8700.0]}
         ),
         "stock_account_statistics_em": pd.DataFrame(
             {
@@ -115,15 +116,20 @@ def build_mock_data(d: date) -> dict[str, pd.DataFrame]:
                 "成立日期": [(d - timedelta(days=2)).isoformat(), (d - timedelta(days=5)).isoformat()],
             }
         ),
-        # 指数实时快照(mock 下所有系列共用一张表,含所需的全部代码)
-        "stock_zh_index_spot_em": pd.DataFrame(
+        # 中证官网指数行情(mock 下 000300/932000 共用一张表,足够跑通逻辑)
+        "stock_zh_index_hist_csindex": pd.DataFrame(
             {
-                "代码": ["000300", "000001", "399106", "932000"],
-                "名称": ["沪深300", "上证综指", "深证综指", "中证2000"],
-                "最新价": [4100.0, 3400.0, 2100.0, 2600.0],
-                "涨跌幅": [-1.2, -0.9, -1.5, -2.2],
-                "成交额": [3200e8, 5100e8, 6300e8, 2400e8],
+                "日期": ds[-5:],
+                "涨跌幅": [0.3, -0.5, 0.8, 0.2, -1.2],
+                "成交金额": [2000.0, 2100.0, 1900.0, 2200.0, 2400.0],  # 亿元
             }
+        ),
+        # 交易所官方成交概况
+        "stock_sse_deal_daily": pd.DataFrame(
+            {"单日情况": ["挂牌数", "成交金额", "成交量"], "股票": [2300, 5100.0, 800.0]}  # 亿元
+        ),
+        "stock_szse_summary": pd.DataFrame(
+            {"证券类别": ["股票", "基金"], "成交金额": [6300e8, 500e8], "数量": [2900, 1000]}  # 元
         ),
         "stock_individual_fund_flow_rank": pd.DataFrame(
             {

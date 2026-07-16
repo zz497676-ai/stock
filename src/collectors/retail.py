@@ -36,11 +36,11 @@ def collect(trade_date: date) -> CollectorResult:
     else:
         r.notes.append("沪市两融接口今日不可用。")
 
-    # 深市两融(单日快照,环比靠历史CSV累积)
+    # 深市两融(单日快照;深交所披露单位为亿元,统一换算成元)
     szse = cached_fetch("stock_margin_szse", date=trade_date.strftime("%Y%m%d"))
     if szse is not None and not szse.empty:
-        r.metrics["szse_margin_balance"] = float(
-            pd.to_numeric(szse.iloc[0]["融资余额"], errors="coerce")
+        r.metrics["szse_margin_balance"] = (
+            float(pd.to_numeric(szse.iloc[0]["融资余额"], errors="coerce")) * 1e8
         )
     else:
         # 两融 T+1 披露,当日取不到时尝试再往前找一天
@@ -48,8 +48,8 @@ def collect(trade_date: date) -> CollectorResult:
             d2 = trade_date - timedelta(days=back)
             szse = cached_fetch("stock_margin_szse", date=d2.strftime("%Y%m%d"))
             if szse is not None and not szse.empty:
-                r.metrics["szse_margin_balance"] = float(
-                    pd.to_numeric(szse.iloc[0]["融资余额"], errors="coerce")
+                r.metrics["szse_margin_balance"] = (
+                    float(pd.to_numeric(szse.iloc[0]["融资余额"], errors="coerce")) * 1e8
                 )
                 r.notes.append(f"深市两融取到的最新日期为 {d2}。")
                 break
@@ -80,16 +80,19 @@ def collect(trade_date: date) -> CollectorResult:
     else:
         r.notes.append("个股资金流排行接口今日不可用,小单口径缺失。")
 
-    # 月度新增开户(低频佐证)
+    # 月度新增开户(低频佐证;返回表顺序不定,按数据日期排序后取最新)
     acct = cached_fetch("stock_account_statistics_em")
     if acct is not None and not acct.empty:
+        acct = acct.sort_values("数据日期")
         latest = acct.iloc[-1]
         r.metrics["new_investors_month"] = float(
             pd.to_numeric(latest["新增投资者-数量"], errors="coerce")
         )
+        mom = pd.to_numeric(latest["新增投资者-环比"], errors="coerce")
+        mom_txt = f"{mom * 100:+.1f}%" if pd.notna(mom) else str(latest["新增投资者-环比"])
         r.evidence.append(
             f"最近披露月份({latest['数据日期']})新增投资者 {latest['新增投资者-数量']} 万户,"
-            f"环比 {latest['新增投资者-环比']}(月频指标)。"
+            f"环比 {mom_txt}(月频指标)。"
         )
 
     return r
