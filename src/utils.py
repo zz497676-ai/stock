@@ -31,8 +31,11 @@ def today_cst() -> date:
     return datetime.now(CST).date()
 
 
-def safe_fetch(func_name: str, *args, retries: int = 3, **kwargs) -> pd.DataFrame | None:
-    """调用 akshare 接口,失败重试;最终失败返回 None 并记录,不中断全局。
+def safe_fetch(
+    func_name: str, *args, retries: int = 2, hard_timeout: int = 90, **kwargs
+) -> pd.DataFrame | None:
+    """调用 akshare 接口,单次调用 90 秒硬超时(akshare 请求默认不设超时,
+    接口挂起会拖垮整个任务),失败重试;最终失败返回 None 并记录,不中断全局。
 
     mock 模式下直接返回 fixtures 中的同名表。
     """
@@ -42,6 +45,8 @@ def safe_fetch(func_name: str, *args, retries: int = 3, **kwargs) -> pd.DataFram
             FETCH_ERRORS.append(f"{func_name}(mock 缺失)")
         return df.copy() if df is not None else None
 
+    import concurrent.futures
+
     import akshare as ak
 
     func = getattr(ak, func_name, None)
@@ -50,15 +55,17 @@ def safe_fetch(func_name: str, *args, retries: int = 3, **kwargs) -> pd.DataFram
         return None
     last_err = None
     for attempt in range(retries):
+        pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
         try:
-            df = func(*args, **kwargs)
-            if df is None or (hasattr(df, "empty") and df.empty):
-                # 空表可能是当日无数据,属正常情况
-                return df
+            df = pool.submit(func, *args, **kwargs).result(timeout=hard_timeout)
+            # 空表可能是当日无数据,属正常情况
             return df
         except Exception as e:  # noqa: BLE001 上游接口异常种类繁多,统一兜底
             last_err = e
             time.sleep(2 * (attempt + 1))
+        finally:
+            # 不等待挂起线程,否则超时形同虚设
+            pool.shutdown(wait=False, cancel_futures=True)
     FETCH_ERRORS.append(f"{func_name}: {type(last_err).__name__}: {str(last_err)[:120]}")
     return None
 
