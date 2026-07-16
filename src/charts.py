@@ -149,13 +149,20 @@ def matrix_chart(order: list[tuple[str, str]], max_days: int = 40) -> str | None
             cls, op = _strength_class_opacity(s)
             b.append(f'<rect x="{x:.1f}" y="{y}" width="{cell_w:.1f}" '
                      f'height="{cell_h}" rx="3" class="{cls}" opacity="{op}"/>')
-    # 日期刻度:首、尾,及每约8列一个
+    # 日期刻度:首尾必标(锚点靠边防碰撞),中间每约1/6标一个且与首尾保持距离
     step = max(1, len(days) // 6)
+    last = len(days) - 1
     for j, d in enumerate(days):
-        if j % step == 0 or j == len(days) - 1:
-            x = left + j * (cell_w + gap) + cell_w / 2
-            b.append(f'<text x="{x:.1f}" y="{H - 18}" font-size="10" '
-                     f'text-anchor="middle" class="mut">{d[5:]}</text>')
+        if j == 0:
+            anchor, x = "start", left
+        elif j == last:
+            anchor, x = "end", left + last * (cell_w + gap) + cell_w
+        elif j % step == 0 and j >= 2 and last - j >= 2:
+            anchor, x = "middle", left + j * (cell_w + gap) + cell_w / 2
+        else:
+            continue
+        b.append(f'<text x="{x:.1f}" y="{H - 18}" font-size="10" '
+                 f'text-anchor="{anchor}" class="mut">{d[5:]}</text>')
     return _svg(W, H, "\n".join(b), "七类资金动向矩阵")
 
 
