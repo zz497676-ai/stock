@@ -7,7 +7,7 @@
 
 | 参与者 | 动向 | 置信度 | 一句话解读 |
 | --- | --- | --- | --- |
-| 国家队 | — 数据不足 | 低 | ETF数据缺失,无法判断。 |
+| 国家队 | → 中性 | 低 | ETF成交已记录,放量基线累积中(约需一个月),暂不判断方向。 |
 | 险资与社保 | → 中性 | 低 | 无涉险资/社保公告;险资无每日数据,默认视为中性。 |
 | 公募基金(附:主观私募) | — 数据不足 | 低 | 数据不足。 |
 | 量化资金 | — 数据不足 | 低 | 指数数据缺失,无法计算小微盘成交占比。 |
@@ -17,16 +17,20 @@
 
 ## 二、分项明细
 
-### 2.1 国家队 — — 数据不足(置信度:低)
+### 2.1 国家队 — → 中性(置信度:低)
 
+- 宽基ETF当日成交已记录;放量倍数需要约一个月历史累积后才能判断,当前为基线建立期。
 
-> ⚠️ ETF 510300 行情接口今日不可用。
-> ⚠️ ETF 510050 行情接口今日不可用。
-> ⚠️ ETF 510500 行情接口今日不可用。
-> ⚠️ ETF 159919 行情接口今日不可用。
-> ⚠️ ETF 588000 行情接口今日不可用。
-> ⚠️ ETF 512100 行情接口今日不可用。
-> ⚠️ 全部国家队观察ETF数据缺失,本节无法判断。
+**汇金系宽基ETF当日成交**
+
+| 代码 | 名称 | 当日成交额 | 相对20日均量 | 涨跌幅 |
+| --- | --- | --- | --- | --- |
+| 510300 | 华泰柏瑞沪深300ETF | 79.1亿 | 基线累积中 | -1.76% |
+| 510050 | 华夏上证50ETF | 37.3亿 | 基线累积中 | -1.96% |
+| 510500 | 南方中证500ETF | 46.1亿 | 基线累积中 | -2.39% |
+| 159919 | 嘉实沪深300ETF | 11.4亿 | 基线累积中 | -1.82% |
+| 588000 | 华夏科创50ETF | 90.3亿 | 基线累积中 | -4.09% |
+| 512100 | 南方中证1000ETF | 56.5亿 | 基线累积中 | -2.43% |
 
 ### 2.2 险资与社保 — → 中性(置信度:低)
 
@@ -36,7 +40,7 @@
 
 ### 2.3 公募基金(附:主观私募) — — 数据不足(置信度:低)
 
-- 全市场ETF总份额 30475亿份(份额环比需要历史数据累积,首日仅记录基数)。
+- 全市场ETF总份额 30519亿份(份额环比需要历史数据累积,首日仅记录基数)。
 - 近7天新成立权益类基金 0 只,合计募集 0.0亿份(反映公募增量资金入场节奏)。
 
 > ⚠️ 主观私募无每日公开持仓/仓位数据,通常仅有第三方月频仓位调查;本报告不对主观私募单独给出每日方向判断。
@@ -55,14 +59,14 @@
 
 | 代码 | 名称 | 收盘价 | 涨跌幅 | 龙虎榜净买额 | 上榜原因 |
 | --- | --- | --- | --- | --- | --- |
-| 002558 | 巨人网络 | 29.56 | 10.0112 | 6.9亿 | 日涨幅偏离值达到7%的前5只证券 |
-| 002558 | 巨人网络 | 29.56 | 10.0112 | 6.9亿 | 日振幅值达到15%的前5只证券 |
-| 002821 | 凯莱英 | 195.75 | 10.0028 | 4.1亿 | 日涨幅偏离值达到7%的前5只证券 |
-| 001896 | 豫能控股 | 14.95 | 10.0074 | 3.6亿 | 日涨幅偏离值达到7%的前5只证券 |
-| 688333 | 铂力特 | 116.2 | 16.7135 | 3.4亿 | 有价格涨跌幅限制的日收盘价格涨幅达到15%的前五只证券 |
-| 600186 | 莲花控股 | 10.25 | 3.0151 | 3.2亿 | 有价格涨跌幅限制的日价格振幅达到15%的前五只证券 |
-| 002739 | 儒意电影 | 9.38 | 9.9648 | 3.1亿 | 日涨幅偏离值达到7%的前5只证券 |
-| 002517 | 恺英网络 | 17.18 | 9.9872 | 2.8亿 | 日涨幅偏离值达到7%的前5只证券 |
+| 002558 | 巨人网络 | 29.56 | +10.01% | 6.9亿 | 日涨幅偏离值达到7%的前5只证券 |
+| 002821 | 凯莱英 | 195.75 | +10.00% | 4.1亿 | 日涨幅偏离值达到7%的前5只证券 |
+| 001896 | 豫能控股 | 14.95 | +10.01% | 3.6亿 | 日涨幅偏离值达到7%的前5只证券 |
+| 688333 | 铂力特 | 116.2 | +16.71% | 3.4亿 | 有价格涨跌幅限制的日收盘价格涨幅达到15%的前五只证券 |
+| 600186 | 莲花控股 | 10.25 | +3.02% | 3.2亿 | 有价格涨跌幅限制的日价格振幅达到15%的前五只证券 |
+| 002739 | 儒意电影 | 9.38 | +9.96% | 3.1亿 | 日涨幅偏离值达到7%的前5只证券 |
+| 002517 | 恺英网络 | 17.18 | +9.99% | 2.8亿 | 日涨幅偏离值达到7%的前5只证券 |
+| 300149 | 睿智医药 | 10.39 | +19.98% | 1.3亿 | 日涨幅达到15%的前5只证券 |
 
 **知名游资席位当日动向**
 
@@ -107,7 +111,7 @@
 - 全市场融资余额约 14448亿(沪 14448亿 + 深 0亿),沪市环比 -72.3亿。
 - 最近披露月份(2023-08)新增投资者 99.59 万户,环比 0.094(月频指标)。
 
-> ⚠️ 大盘资金流接口今日不可用。
+> ⚠️ 个股资金流排行接口今日不可用,小单口径缺失。
 
 ## 三、数据说明与局限
 
@@ -118,14 +122,8 @@
 - 两融、龙虎榜等数据为 T+1 或盘后披露,个别接口更新时间不一。
 
 **本次运行失败的数据源:**
-- index_zh_a_hist: ConnectionError: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
-- fund_etf_hist_em: ConnectionError: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
-- fund_etf_hist_em: ConnectionError: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
-- fund_etf_hist_em: ConnectionError: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
-- fund_etf_hist_em: ConnectionError: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
-- fund_etf_hist_em: ConnectionError: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
-- fund_etf_hist_em: ConnectionError: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
-- index_zh_a_hist: ConnectionError: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
-- index_zh_a_hist: ConnectionError: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
-- index_zh_a_hist: ConnectionError: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
-- stock_market_fund_flow: ConnectionError: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+- stock_zh_index_spot_em: ConnectionError: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+- stock_zh_index_spot_em: ConnectionError: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+- stock_zh_index_spot_em: ConnectionError: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+- stock_zh_index_spot_em: ConnectionError: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+- stock_individual_fund_flow_rank: JSONDecodeError: Expecting value: line 1 column 1 (char 0)
