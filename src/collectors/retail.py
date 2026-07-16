@@ -90,9 +90,11 @@ def collect(trade_date: date) -> CollectorResult:
         )
         mom = pd.to_numeric(latest["新增投资者-环比"], errors="coerce")
         mom_txt = f"{mom * 100:+.1f}%" if pd.notna(mom) else str(latest["新增投资者-环比"])
+        stale = str(latest["数据日期"]) < f"{trade_date.year - 1}"
+        stale_txt = ";该月度口径中登公司已停止披露,仅作历史参考" if stale else ""
         r.evidence.append(
             f"最近披露月份({latest['数据日期']})新增投资者 {latest['新增投资者-数量']} 万户,"
-            f"环比 {mom_txt}(月频指标)。"
+            f"环比 {mom_txt}(月频指标{stale_txt})。"
         )
 
     return r
