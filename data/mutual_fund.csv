@@ -1,2 +1,3 @@
-date,etf_total_shares,etf_total_value,etf_total_turnover,new_equity_fund_count_7d,new_equity_fund_amt_7d
-2026-07-15,3051862173395.0,3865993292311.3994,343846854782.08905,0,0.0
+date,etf_total_shares,etf_total_value,etf_total_turnover,new_equity_fund_count_7d,new_equity_fund_amt_7d,etf_shares_chg
+2026-07-15,3051862173395.0,3865993292311.4,343846854782.08905,0,0.0,
+2026-07-16,3044160186061.0,3859338938409.454,343846854782.089,0,0.0,-7701987334.0
