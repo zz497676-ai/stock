@@ -6,3 +6,10 @@ date,key,strength,confidence
 2026-07-15,hot_money,1.0,高
 2026-07-15,industrial,0.0,高
 2026-07-15,retail,-1.0,高
+2026-07-16,national_team,0.0,低
+2026-07-16,insurance_social,0.0,低
+2026-07-16,mutual_fund,0.0,中
+2026-07-16,quant,0.0,低
+2026-07-16,hot_money,0.0,高
+2026-07-16,industrial,0.0,高
+2026-07-16,retail,-1.0,高
