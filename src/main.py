@@ -63,6 +63,26 @@ def run(trade_date: date, mock: bool = False, skip_calendar: bool = False) -> in
             res.history = upsert_history(res.key, trade_date, res.metrics)
         results.append((res, analyze(res)))
 
+    # 结论历史(动向矩阵图的数据源):按 参与者×日期 记录强度与置信度
+    if not mock:
+        for r, v in results:
+            upsert_history(
+                "verdicts",
+                trade_date,
+                {"key": r.key, "strength": v.strength, "confidence": v.confidence},
+                extra_key="key",
+            )
+
+    # 生成图表(mock 写入独立目录,不污染正式产物)
+    from charts import render_all
+
+    charts_dir = utils.ROOT / "reports" / ("charts-mock" if mock else "charts")
+    try:
+        written = render_all(trade_date, results, charts_dir)
+        print(f"[charts] 生成 {len(written)} 张图表: {', '.join(written)}")
+    except Exception as e:  # noqa: BLE001 图表失败不影响日报
+        print(f"[charts] 图表生成失败: {type(e).__name__}: {e}")
+
     content = render(trade_date, results)
     if mock:
         out = utils.ROOT / "reports" / f"mock-{trade_date.isoformat()}.md"

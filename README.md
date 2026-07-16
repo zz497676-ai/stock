@@ -6,6 +6,22 @@
 
 <!-- latest-report -->最新日报:[2026-07-16](reports/2026-07-16.md)<!-- latest-report -->
 
+## 今日动向一图览
+
+![七类资金今日动向](reports/charts/latest-overview.svg)
+
+![动向矩阵](reports/charts/matrix.svg)
+
+<details>
+<summary>更多趋势图(点击展开)</summary>
+
+![融资余额趋势](reports/charts/margin.svg)
+![小微盘成交占比](reports/charts/micro_share.svg)
+![游资席位净买入](reports/charts/hot_money.svg)
+![ETF份额变动](reports/charts/etf_flow.svg)
+
+</details>
+
 ## 工作原理
 
 - 数据源:[akshare](https://github.com/akfamily/akshare) 免费公开接口(东方财富、沪深交易所等)

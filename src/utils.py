@@ -100,12 +100,18 @@ def load_history(name: str) -> pd.DataFrame:
     return pd.DataFrame()
 
 
-def upsert_history(name: str, d: date, metrics: dict) -> pd.DataFrame:
-    """把当日指标写入 data/<name>.csv(同日重跑覆盖旧行),返回更新后的完整历史。"""
+def upsert_history(name: str, d: date, metrics: dict, extra_key: str | None = None) -> pd.DataFrame:
+    """把当日指标写入 data/<name>.csv(同日重跑覆盖旧行),返回更新后的完整历史。
+
+    extra_key: 组合主键的第二列名(如 verdicts 按 日期+参与者 去重)。
+    """
     hist = load_history(name)
     row = {"date": d.isoformat(), **metrics}
     if not hist.empty:
-        hist = hist[hist["date"] != d.isoformat()]
+        if extra_key and extra_key in hist.columns:
+            hist = hist[~((hist["date"] == d.isoformat()) & (hist[extra_key] == metrics[extra_key]))]
+        else:
+            hist = hist[hist["date"] != d.isoformat()]
     hist = pd.concat([hist, pd.DataFrame([row])], ignore_index=True)
     hist = hist.sort_values("date").reset_index(drop=True)
     hist.to_csv(history_path(name), index=False)

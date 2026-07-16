@@ -35,10 +35,20 @@ def render(trade_date: date, results: list[tuple[CollectorResult, Verdict]]) -> 
     # 总览表
     lines.append("## 一、七类资金动向总览")
     lines.append("")
+    lines.append(f"![七类资金今日动向](charts/overview-{trade_date.isoformat()}.svg)")
+    lines.append("")
     lines.append("| 参与者 | 动向 | 置信度 | 一句话解读 |")
     lines.append("| --- | --- | --- | --- |")
     for r, v in results:
         lines.append(f"| {r.title} | {v.arrow} | {v.confidence} | {v.summary} |")
+    lines.append("")
+    lines.append("**历史趋势(随每日运行更新)**")
+    lines.append("")
+    lines.append("![动向矩阵](charts/matrix.svg)")
+    lines.append("![融资余额趋势](charts/margin.svg)")
+    lines.append("![小微盘成交占比](charts/micro_share.svg)")
+    lines.append("![游资席位净买入](charts/hot_money.svg)")
+    lines.append("![ETF份额变动](charts/etf_flow.svg)")
     lines.append("")
 
     # 分节明细
