@@ -149,14 +149,17 @@ def matrix_chart(order: list[tuple[str, str]], max_days: int = 40) -> str | None
             cls, op = _strength_class_opacity(s)
             b.append(f'<rect x="{x:.1f}" y="{y}" width="{cell_w:.1f}" '
                      f'height="{cell_h}" rx="3" class="{cls}" opacity="{op}"/>')
-    # 日期刻度:首尾必标(锚点靠边防碰撞),中间每约1/6标一个且与首尾保持距离
+    # 日期刻度:首尾锚点靠边防碰撞;总宽摆不下两个标签时只标最后一天
     step = max(1, len(days) // 6)
     last = len(days) - 1
+    total = len(days) * (cell_w + gap) - gap
     for j, d in enumerate(days):
-        if j == 0:
+        if j == last:
+            anchor, x = "end", left + total
+        elif total < 76:
+            continue
+        elif j == 0:
             anchor, x = "start", left
-        elif j == last:
-            anchor, x = "end", left + last * (cell_w + gap) + cell_w
         elif j % step == 0 and j >= 2 and last - j >= 2:
             anchor, x = "middle", left + j * (cell_w + gap) + cell_w / 2
         else:

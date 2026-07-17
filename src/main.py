@@ -69,7 +69,12 @@ def run(trade_date: date, mock: bool = False, skip_calendar: bool = False) -> in
             upsert_history(
                 "verdicts",
                 trade_date,
-                {"key": r.key, "strength": v.strength, "confidence": v.confidence},
+                {
+                    "key": r.key,
+                    "strength": v.strength,
+                    "confidence": v.confidence,
+                    "summary": v.summary,
+                },
                 extra_key="key",
             )
 
@@ -82,6 +87,16 @@ def run(trade_date: date, mock: bool = False, skip_calendar: bool = False) -> in
         print(f"[charts] 生成 {len(written)} 张图表: {', '.join(written)}")
     except Exception as e:  # noqa: BLE001 图表失败不影响日报
         print(f"[charts] 图表生成失败: {type(e).__name__}: {e}")
+
+    # 交互式网页看板(GitHub Pages)
+    if not mock:
+        try:
+            from webpage import write_page
+
+            write_page(trade_date)
+            print("[web] docs/index.html 已更新")
+        except Exception as e:  # noqa: BLE001 网页失败不影响日报
+            print(f"[web] 网页生成失败: {type(e).__name__}: {e}")
 
     content = render(trade_date, results)
     if mock:
