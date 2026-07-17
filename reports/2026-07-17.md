@@ -11,7 +11,7 @@
 | --- | --- | --- | --- |
 | 国家队 | → 中性 | 低 | ETF成交已记录,放量基线累积中(约需一个月),暂不判断方向。 |
 | 险资与社保 | → 中性 | 低 | 无涉险资/社保公告;险资无每日数据,默认视为中性。 |
-| 公募基金(附:主观私募) | ↑ 流入 | 中 | 全市场ETF份额环比 +0.32%(申赎代理);近7天新发权益基金 0亿份。 |
+| 公募基金(附:主观私募) | ↑ 流入 | 中 | 全市场ETF份额环比 +0.60%(申赎代理);近7天新发权益基金 0亿份。 |
 | 量化资金 | → 中性 | 低 | 小微盘成交占比 15.5%,均值基线待历史累积。 |
 | 游资 | → 中性 | 高 | 知名游资席位 4 个上榜,合计净买入 -0.1亿。 |
 | 产业资本 | ↑ 流入 | 高 | 回购公告 12 家;大宗溢价成交占比 32%。 |
@@ -50,7 +50,7 @@
 
 ### 2.3 公募基金(附:主观私募) — ↑ 流入(置信度:中)
 
-- 全市场ETF总份额较上一交易日变动 +98.2亿份(净申购),以此作为公募被动端申赎代理。
+- 全市场ETF总份额较上一交易日变动 +183.8亿份(净申购),以此作为公募被动端申赎代理。
 - 近7天新成立权益类基金 1 只,合计募集 0.0亿份(反映公募增量资金入场节奏)。
 
 **近7天新成立权益基金(募集前5)**
@@ -124,4 +124,4 @@
 - stock_ggcg_em: TimeoutError: 
 - stock_ggcg_em: TimeoutError: 
 - stock_margin_szse: ValueError: Length mismatch: Expected axis has 0 elements, new values have 6 elements
-- stock_individual_fund_flow_rank: SSLError: HTTPSConnectionPool(host='push2.eastmoney.com', port=443): Max retries exceeded with url: /api/qt/clist/get?fid=f62&po=1
+- stock_individual_fund_flow_rank: JSONDecodeError: Expecting value: line 1 column 1 (char 0)
