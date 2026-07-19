@@ -66,8 +66,15 @@ def _clean_missing(raw: dict) -> list[str]:
     return missing
 
 
-def collect(trade_date: date) -> dict:
-    """采集当日全部原始指标,返回 {"raw": {12个指标}, "missing": [缺席指标名]}。"""
+def _collect_core(trade_date: date, backfill: bool) -> dict:
+    """collect() 与 collect_backfill() 共用的采集逻辑。
+
+    backfill=True 时跳过乐咕(涨跌家数占比):乐咕 `stock_market_activity_legu` 只是
+    一个当前快照接口,不支持按历史日期查询——如果给它传一个历史 trade_date,拿到的
+    永远是"运行回填脚本那一刻"的实时快照,会把今天的数字错误地写成历史某天的数据,
+    比"缺这一项"更糟。所以 adv_ratio 只有 collect()(处理当天)会真的去采,
+    collect_backfill()(处理历史日期)固定留空,靠后续每天的 collect() 自然补齐。
+    """
     raw: dict = {}
 
     # ---- 市场宽度:涨停/跌停/连板,来自涨停池系列(已实测可用) ----
@@ -89,14 +96,17 @@ def collect(trade_date: date) -> dict:
         raw["boards_ge2"] = 0
         raw["max_board"] = 0
 
-    # 涨跌家数占比:原计划的全市场快照主/备源实测均在 Actions 上挂起超时(见 spec §5),
-    # 乐咕是目前唯一可用源,失败就真的没有备份了。
-    up = _legu_value(["上涨", "上涨家数"])
-    down = _legu_value(["下跌", "下跌家数"])
-    if up is not None and down is not None and (up + down) > 0:
-        raw["adv_ratio"] = up / (up + down)
-    else:
+    if backfill:
         raw["adv_ratio"] = None
+    else:
+        # 涨跌家数占比:原计划的全市场快照主/备源实测均在 Actions 上挂起超时(见 spec §5),
+        # 乐咕是目前唯一可用源,失败就真的没有备份了。
+        up = _legu_value(["上涨", "上涨家数"])
+        down = _legu_value(["下跌", "下跌家数"])
+        if up is not None and down is not None and (up + down) > 0:
+            raw["adv_ratio"] = up / (up + down)
+        else:
+            raw["adv_ratio"] = None
 
     # ---- 情绪强度 ----
     zhaban = None if zb is None else len(zb)
@@ -136,3 +146,16 @@ def collect(trade_date: date) -> dict:
 
     missing = _clean_missing(raw)
     return {"raw": raw, "missing": missing}
+
+
+def collect(trade_date: date) -> dict:
+    """采集当日(通常是今天)全部原始指标,返回 {"raw": {12个指标}, "missing": [缺席指标名]}。"""
+    return _collect_core(trade_date, backfill=False)
+
+
+def collect_backfill(trade_date: date) -> dict:
+    """采集历史某个交易日的可回填指标,adv_ratio 固定为 None(乐咕无历史查询能力,
+    见 _collect_core 顶部说明)。供 src/backfill_temperature.py 调用,main.py 的
+    正常每日流程不应该用这个入口。
+    """
+    return _collect_core(trade_date, backfill=True)

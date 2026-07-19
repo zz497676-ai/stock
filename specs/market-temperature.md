@@ -19,6 +19,11 @@
 > 5. 全部通过 `python src/main.py --mock` 跑通(温度模块采集器已接入 `fixtures.py`),
 >    并用 Playwright 实际渲染截图验证了明暗主题、断点渲染(DOM 级验证 polyline 分段)、
 >    "今日数据缺失"边界场景。
+> 6. **新增历史回填脚本** `src/backfill_temperature.py` + `.github/workflows/backfill-temperature.yml`
+>    (workflow_dispatch 手动触发,合并到 main 后可用)。只回填涨停池系列/成交额/指数这些支持
+>    按历史日期查询的指标;`adv_ratio` 回填不了(乐咕无历史查询能力),固定留空,靠上线后
+>    每天的正常 `collect()` 逐日补齐。脚本只增不改——跳过 `data/temperature.csv` 里已有的
+>    日期,避免覆盖当日采集器写入的真实值,可重复运行。
 >
 > v1.2 变更摘要(相对 v1.1):第 0 步连通性探测已在 GitHub Actions 实跑完成(探测脚本
 > `src/probe_temperature_sources.py`,运行记录见仓库 Actions 「温度评分数据源连通性探测」
