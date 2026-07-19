@@ -69,6 +69,33 @@ leverage:
   min_float_mcap_yi: 20.0      # 剔除流通市值低于此值(亿元)的个股,避免小盘噪音
   balance_ratio_alert_pct: 8.0 # 融资余额占流通市值超过该比例,标记"杠杆偏高"
 
+# 市场温度评分(spec: specs/market-temperature.md)
+temperature:
+  # 组间权重(总和应为1;某组当日整组缺席时,总分按剩余组权重归一化)
+  weights:
+    breadth: 0.35     # 市场宽度
+    sentiment: 0.30   # 情绪强度
+    volume: 0.20      # 量能
+    index: 0.15       # 指数
+  # 组内成员,组内等权平均;某成员当日缺席就只在组内剩余成员间平均
+  groups:
+    breadth: [adv_ratio, limit_up, limit_down, boards_ge2, max_board]
+    sentiment: [seal_rate, yesterday_zt_ret]
+    volume: [turnover_yuan, turnover_vs_5d]
+    index: [sh_chg, sz_chg, cyb_chg]
+  # 反向指标:值越大温度越低,分位数取 100-分位数(其余指标默认正向)
+  reverse_metrics: [limit_down]
+  percentile_window: 250     # 分位数计算的最大历史窗口(交易日);不足则用已有天数(冷启动)
+  low_sample_threshold: 60   # 该指标累计样本数低于此值,页面标注"样本不足"
+  min_score_weight: 0.5      # 当日可用分组权重之和低于此值,不出总分(历史曲线留断点)
+  warm_up_days: 20           # 上线后前N个交易日,页面标注"建仓期,分数参考性有限"
+  bands:                     # 档位划分,按 score <= max 从上到下匹配第一个命中的
+    - {max: 20, label: "冰点"}
+    - {max: 40, label: "偏冷"}
+    - {max: 60, label: "中性"}
+    - {max: 80, label: "偏热"}
+    - {max: 100, label: "过热"}
+
 # 数据与报告输出目录
 data_dir: "data"
 reports_dir: "reports"
