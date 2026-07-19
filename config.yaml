@@ -63,6 +63,12 @@ insurance_keywords:
 # 异动判断的历史均值窗口(交易日)
 lookback_days: 20
 
+# 个股杠杆(两融)监测
+leverage:
+  top_n: 15                    # 当日杠杆排行取前 N 只
+  min_float_mcap_yi: 20.0      # 剔除流通市值低于此值(亿元)的个股,避免小盘噪音
+  balance_ratio_alert_pct: 8.0 # 融资余额占流通市值超过该比例,标记"杠杆偏高"
+
 # 数据与报告输出目录
 data_dir: "data"
 reports_dir: "reports"
