@@ -93,6 +93,34 @@ def write_page(trade_date: date, out_dir=None) -> None:
     (out / "index.html").write_text(render_page(trade_date), encoding="utf-8")
 
 
+def write_leverage_data(out_dir=None) -> None:
+    """把全量个股杠杆数据导出成 docs/leverage_data.json,供 risk.html 按代码查询单只持仓的杠杆水位。
+
+    只含当日快照(不是历史时间序列),按代码建索引,体积小、查询是 O(1)。
+    """
+    out = (out_dir or (ROOT / "docs"))
+    out.mkdir(parents=True, exist_ok=True)
+    all_path = ROOT / load_config()["data_dir"] / "leverage_all.csv"
+    by_code: dict = {}
+    if all_path.exists():
+        df = pd.read_csv(all_path, dtype={"代码": str})
+        for _, row in df.iterrows():
+            by_code[row["代码"]] = {
+                "name": row["名称"],
+                "buy_ratio": None if pd.isna(row["融资买入占成交额%"]) else float(row["融资买入占成交额%"]),
+                "balance_ratio": None if pd.isna(row["融资余额占流通市值%"]) else float(row["融资余额占流通市值%"]),
+                "chg_pct": None if pd.isna(row["当日涨跌幅%"]) else float(row["当日涨跌幅%"]),
+                "amplitude_pct": None if pd.isna(row["当日振幅%"]) else float(row["当日振幅%"]),
+            }
+    payload = {
+        "alert_pct": float(load_config().get("leverage", {}).get("balance_ratio_alert_pct", 8.0)),
+        "stocks": by_code,
+    }
+    (out / "leverage_data.json").write_text(
+        json.dumps(payload, ensure_ascii=False), encoding="utf-8"
+    )
+
+
 HTML_TEMPLATE = """<!doctype html>
 <html lang="zh-CN">
 <head>

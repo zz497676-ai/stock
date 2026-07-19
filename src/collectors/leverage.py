@@ -140,22 +140,25 @@ def collect(trade_date: date) -> CollectorResult:
             merged["融资余额占流通市值%"] = (
                 pd.to_numeric(merged["融资余额"], errors="coerce") / merged["流通市值"] * 100
             )
-            top = merged.sort_values("融资买入占成交额%", ascending=False).head(top_n)
-            alert_count = int((top["融资余额占流通市值%"] >= alert_pct).sum())
-            r.metrics["leverage_top_alert_count"] = alert_count
-            show = top[
+            full = merged[
                 ["代码", "名称", "融资买入占成交额%", "融资余额占流通市值%", "涨跌幅", "振幅"]
             ].copy()
             for c in ("融资买入占成交额%", "融资余额占流通市值%"):
-                show[c] = show[c].round(2)
-            show = show.rename(columns={"涨跌幅": "当日涨跌幅%", "振幅": "当日振幅%"})
+                full[c] = full[c].round(2)
+            full = full.rename(columns={"涨跌幅": "当日涨跌幅%", "振幅": "当日振幅%"})
+            full = full.sort_values("融资买入占成交额%", ascending=False).reset_index(drop=True)
+            r.full_table = full  # 全量:供网页按个股代码查询用,不进日报
+
+            show = full.head(top_n)
+            alert_count = int((full["融资余额占流通市值%"] >= alert_pct).sum())
+            r.metrics["leverage_top_alert_count"] = alert_count
             r.tables.append(
                 (f"当日杠杆最集中个股(前{len(show)}只,{detail_date.isoformat()}两融数据)", show)
             )
             r.evidence.append(
-                f"当日杠杆最集中的{len(show)}只个股中,{alert_count}只融资余额占流通市值超过"
+                f"当日纳入统计的{len(full)}只个股中,{alert_count}只融资余额占流通市值超过"
                 f"{alert_pct:.0f}%(阈值见 config.yaml);建议持有这类个股时使用更紧的止损比例"
-                "(参考仓位/止损计算器)。"
+                "(参考仓位/止损计算器,该工具支持按代码查询个股杠杆水位)。"
             )
         else:
             r.notes.append("个股两融明细与行情匹配后,没有满足流通市值门槛的样本。")

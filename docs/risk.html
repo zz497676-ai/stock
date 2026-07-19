@@ -157,7 +157,7 @@ tr.warn td { color: var(--warn); }
           <thead>
             <tr>
               <th>代码/名称</th><th>成本价</th><th>现价</th><th>数量</th>
-              <th>浮动盈亏</th><th>浮动比例</th><th>状态</th><th></th>
+              <th>浮动盈亏</th><th>浮动比例</th><th>状态</th><th>杠杆(买入%/余额%)</th><th></th>
             </tr>
           </thead>
           <tbody id="watchBody"></tbody>
@@ -172,13 +172,17 @@ tr.warn td { color: var(--warn); }
         <button id="addBtn">添加</button>
       </div>
       <div class="note">现价可随时在表格中直接修改,浮动盈亏与状态会实时重新计算;
-        浮亏达到或超过上方设定的风险阈值时标红,提示应考虑止损。</div>
+        浮亏达到或超过上方设定的风险阈值时标红,提示应考虑止损。<br>
+        "代码/名称"里包含6位数字代码时,会自动匹配当日个股杠杆数据(融资买入占成交额% / 融资余额占流通市值%);
+        余额占比超过预警阈值同样标红。该数据每交易日更新一次,来自本站"资金动向看板"的杠杆监测模块,
+        需联网加载,离线打开本页(file://)时这一列会显示"—"。</div>
     </div>
   </section>
 
   <div class="card foot">
-    本工具只做本地算术计算(仓位大小、止损价、浮动盈亏),不获取行情、不提供任何交易建议,
-    也不构成投资建议。风险自负,请结合自己的实际情况使用。
+    仓位/止损计算与持仓浮动盈亏均为本地算术计算,不获取实时行情;持仓监控里的"杠杆"一列会联网加载
+    本站每日更新的个股杠杆快照(只读,不上传你的任何持仓数据)。以上均不提供任何交易建议,也不构成
+    投资建议。风险自负,请结合自己的实际情况使用。
   </div>
 </div>
 <script>
@@ -189,6 +193,11 @@ const LS_WATCH = "riskTool.watchlist";
 const $ = id => document.getElementById(id);
 const fmt = (n, d=2) => Number(n).toLocaleString("zh-CN", { minimumFractionDigits: d, maximumFractionDigits: d });
 const fmtPct = (n, d=2) => (n>0?"+":"") + Number(n).toFixed(d) + "%";
+
+// ---- 个股杠杆快照(只读,联网加载;离线/加载失败时静默降级为"—") ----
+let LEVERAGE = { alert_pct: 8, stocks: {} };
+fetch("leverage_data.json").then(r => r.json()).then(d => { LEVERAGE = d; renderWatch(); }).catch(() => {});
+const extractCode = s => { const m = String(s || "").match(/\d{6}/); return m ? m[0] : null; };
 
 // ---- 顶部风险阈值(两个 tab 共用) ----
 const riskPctEl = $("riskPct");
@@ -330,6 +339,17 @@ function renderWatch() {
     if (pnlPct <= -riskPct) { cls = "danger"; tag = `<span class="tag danger">建议止损</span>`; alertCount++; }
     else if (pnlPct <= -riskPct * 0.7) { cls = "warn"; tag = `<span class="tag warn">接近止损</span>`; }
 
+    const code = extractCode(item.name);
+    const lev = code ? LEVERAGE.stocks[code] : null;
+    let levCell = "—";
+    if (lev) {
+      const levAlert = lev.balance_ratio !== null && lev.balance_ratio >= LEVERAGE.alert_pct;
+      levCell = `<span${levAlert ? ' style="color:var(--danger);font-weight:600"' : ""}>`
+        + `${lev.buy_ratio ?? "—"}% / ${lev.balance_ratio ?? "—"}%</span>`;
+    } else if (code) {
+      levCell = `<span style="color:var(--mut)">未上榜</span>`;
+    }
+
     const tr = document.createElement("tr"); tr.className = cls;
     tr.innerHTML = `
       <td><input data-f="name" value="${(item.name||"").replace(/"/g,'&quot;')}"></td>
@@ -339,6 +359,7 @@ function renderWatch() {
       <td>${pnl>=0?"+":""}${fmt(pnl)}</td>
       <td>${fmtPct(pnlPct)}</td>
       <td>${tag}</td>
+      <td>${levCell}</td>
       <td><button class="delbtn" data-del="${idx}" title="删除">✕</button></td>`;
     body.appendChild(tr);
   });
