@@ -1,5 +1,25 @@
 # A 股市场温度评分 — Spec v1.2
 
+> **实现状态(2026-07-19)**:§9 五个开发步骤已全部完成并推送到本分支,细节与原计划的
+> 出入记录在下面几点,其余按 spec 原样实现:
+> 1. **页面技术选型改了**:§8 原计划「vendor ECharts 或学 charts.py 出 SVG」二选一,
+>    实测发现 `docs/index.html`、`docs/risk.html` 现有约定其实是**纯手写内联 SVG +
+>    CSS 变量做明暗主题**(零外部依赖,连 charts.py 那种后端矩阵图都不是),`temperature.html`
+>    照这个约定写,不引入任何前端依赖。且它是**静态文件**(随本次提交进仓库一次性写入,
+>    不像 `index.html` 那样每天由 Python 重新生成)——只有 `docs/temperature_data.json`
+>    每天更新,页面用 `fetch()` 读取,与 `risk.html` 读 `leverage_data.json` 的模式一致。
+> 2. **JSON schema 比 §6 原示例多两个字段**:`low_sample`(该指标当日样本数 < 60,对应
+>    §4「样本不足」标注)、`warm_up`(该日是否在上线后前 20 个交易日内,对应「建仓期」标注)。
+>    §6 示例已更新。
+> 3. **不出分的门槛**给了具体数字:可用分组权重之和 < 0.5(即缺失的组占了一半以上权重)
+>    时当日不出总分,写入 `config.yaml` 的 `min_score_weight`,而不是 §4 原文「大面积失败」
+>    这种没有量化的说法。
+> 4. `docs/index.html` 首页已加入口链接;`daily.yml` **不需要改动**——`git add data reports
+>    docs README.md` 已经覆盖新增的 `data/temperature.csv`、`docs/temperature_data.json`。
+> 5. 全部通过 `python src/main.py --mock` 跑通(温度模块采集器已接入 `fixtures.py`),
+>    并用 Playwright 实际渲染截图验证了明暗主题、断点渲染(DOM 级验证 polyline 分段)、
+>    "今日数据缺失"边界场景。
+>
 > v1.2 变更摘要(相对 v1.1):第 0 步连通性探测已在 GitHub Actions 实跑完成(探测脚本
 > `src/probe_temperature_sources.py`,运行记录见仓库 Actions 「温度评分数据源连通性探测」
 > 2026-07-19 那次)。结论**部分比预期乐观、部分比预期悲观**,不是简单的"东财都不通":
@@ -150,14 +170,19 @@
         "sh_chg": 0.8, "sz_chg": 1.1, "cyb_chg": 1.6
       },
       "pct": {"adv_ratio": 71.0, "limit_up": 80.4, "...": "各指标当日分位数"},
-      "missing": []
+      "missing": [],
+      "low_sample": [],
+      "warm_up": false
     }
   ]
 }
 ```
 
-- `missing` 记录当日缺席的指标名,前端据此展示「暂缺」。
-- 权重、档位阈值写入 `config.yaml` 新增 `temperature:` 段,不硬编码,方便回测后调整。
+- `missing`:当日缺席的指标名,前端据此展示「暂缺」。
+- `low_sample`:该日样本数 < 60(`config.yaml` 的 `low_sample_threshold`)的指标名列表,对应 §4「样本不足」标注。回填过的指标(成交额、指数、涨停池系列)上线首日就有 250 天样本,不会出现在这里;只有 `adv_ratio`(乐咕无历史查询)会在上线后前 60 个交易日出现。
+- `warm_up`:该日是否在上线后前 `warm_up_days`(默认 20)个交易日内,对应「建仓期,分数参考性有限」提示。
+- `score`/`band` 为 `null`:当日可用分组权重之和低于 `min_score_weight`(默认 0.5)时不出总分,由前端展示「今日数据缺失」,历史曲线在此处留断点(不连接前后两天)。
+- 权重、组内成员、反向指标、窗口/阈值、档位全部写在 `config.yaml` 的 `temperature:` 段,不硬编码,方便回测后调整——调权重/窗口后重跑 `webpage.write_temperature_data()` 即可用同一份 `data/temperature.csv` 原始值重新出全部历史,不需要重新抓数据。
 
 ## 7. 调度与架构
 
@@ -181,22 +206,22 @@
 
 `docs/temperature.html`,移动端优先(微信内打开):
 
-- **顶部**:日期 + 大号评分(例:68 · 偏热)+ 较上一交易日变化箭头
-- **中部**:分项卡片——涨跌家数、涨停/炸板/封板率、成交额及放缩量、三大指数;缺席指标显示「暂缺」而非 0
-- **底部**:近 60 日评分折线(可切 250 日),叠加 5 日均线(纯前端计算)以平滑单日抖动
-- **图表库**:ECharts **vendor 进 `docs/` 本地引用**(约 350KB),不走 CDN——jsdelivr 等在国内/微信内不稳定。若嫌体积大,备选方案是学 `src/charts.py` 后端出 SVG
-- `docs/index.html` 首页加入口链接
+- **顶部**:日期 + 大号评分(例:68 · 偏热)+ 较上一交易日变化箭头 + 0–100 温度计(meter,标 5 档边界)
+- **中部**:分项卡片——涨跌家数、涨停/跌停、连板、封板率与打板情绪、成交额及放缩量、三大指数;缺席指标显示「暂缺」而非 0,样本不足的指标额外标「样本不足」
+- **底部**:近 60 日评分折线(可切 250 日/全部),叠加 5 日均线(纯前端计算)以平滑单日抖动;不出分的日子在线上留断点(不连接前后两天),5 日均线只要有 5 个真实评分就继续算,不随断点中断
+- **实现方式(非 vendor ECharts)**:`docs/index.html`、`docs/risk.html` 现有约定是纯手写内联 SVG + CSS 变量做明暗主题,零外部依赖;`temperature.html` 照此约定实现,不引入 ECharts 或任何前端库。且它是**静态文件**,不像 `index.html` 那样每天由 Python 重新生成——只有 `docs/temperature_data.json` 每天更新,页面用 `fetch()` 读取(与 `risk.html` 读 `leverage_data.json` 的模式一致)
+- `docs/index.html` 首页已加入口链接
 
 ## 9. 开发步骤(修订)
 
-| 步骤 | 内容 |
-|---|---|
-| **第 0 步 ✅ 已完成** | 连通性探测脚本(`src/probe_temperature_sources.py`)+ Actions 实测涨停池系列、乐咕、全市场快照、指数备源;结论见 §5 |
-| 第 1 步(半天~1 天) | `collectors/temperature.py` 采集全部指标(按实测结论定主备源),接 `--mock` fixtures |
-| 第 2 步(半天) | 评分函数(分位数 + 方向 + 组内等权 + 加权)+ 回填脚本跑一次 + `temperature_data.json` 落盘 |
-| 第 3 步(1 天) | `docs/temperature.html` 页面 + vendored ECharts + 首页入口 |
-| 第 4 步(半天) | 并入 `main.py` 与 daily.yml 验证端到端,含 `--mock` 全流程 |
-| 之后 | 跑一个月,用落盘的 raw 值回测调整权重与组内权重,再上 v2 两融指标 |
+| 步骤 | 内容 | 状态 |
+|---|---|---|
+| 第 0 步 | 连通性探测脚本(`src/probe_temperature_sources.py`)+ Actions 实测涨停池系列、乐咕、全市场快照、指数备源;结论见 §5 | ✅ 已完成 |
+| 第 1 步 | `collectors/temperature.py` 采集全部指标(按实测结论定主备源),接 `--mock` fixtures | ✅ 已完成 |
+| 第 2 步 | 评分函数(`temperature_score.py`:分位数 + 方向 + 组内/组间权重归一化)+ `webpage.write_temperature_data()` 落盘 `docs/temperature_data.json` | ✅ 已完成 |
+| 第 3 步 | `docs/temperature.html` 页面(手写内联 SVG,非 ECharts,见 §8)+ 首页入口;已用 Playwright 截图验证明暗主题、断点渲染、缺分边界场景 | ✅ 已完成 |
+| 第 4 步 | 并入 `main.py`(独立 try/except,不影响八类资金主流程)验证端到端,`python src/main.py --mock` 全流程跑通;daily.yml 无需改动 | ✅ 已完成 |
+| 之后 | 跑一个月,用 `data/temperature.csv` 里的 raw 值回测调整权重与组内权重,再上 v2 两融指标 | 待运行数据积累 |
 
 ## 10. 边界与免责
 

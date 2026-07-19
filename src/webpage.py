@@ -12,6 +12,7 @@ from datetime import date
 
 import pandas as pd
 
+import temperature_score
 from utils import ROOT, load_config, load_history
 
 PARTICIPANTS = [
@@ -121,6 +122,26 @@ def write_leverage_data(out_dir=None) -> None:
     )
 
 
+def write_temperature_data(out_dir=None) -> None:
+    """把 data/temperature.csv 全量重算成 docs/temperature_data.json,供 temperature.html 渲染。
+
+    docs/temperature.html 是静态文件(不随每日构建重新生成),只有这个 JSON 每天更新;
+    它同时是唯一的历史存档(spec §6)——raw 是真实来源,pct/score 每次都全量重算,
+    以后调权重/窗口不需要重新抓数据。
+    """
+    out = (out_dir or (ROOT / "docs"))
+    out.mkdir(parents=True, exist_ok=True)
+    hist = load_history("temperature")
+    days = temperature_score.score_history(hist)
+    payload = {
+        "updated": days[-1]["date"] if days else None,
+        "days": days,
+    }
+    (out / "temperature_data.json").write_text(
+        json.dumps(payload, ensure_ascii=False), encoding="utf-8"
+    )
+
+
 HTML_TEMPLATE = """<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -182,6 +203,7 @@ a { color: var(--outflow); }
   <h1>A股资金动向看板</h1>
   <div class="sub">数据截至 __DATE__ · 每交易日自动更新 ·
     <a id="report-link" href="#">查看当日文字日报</a> ·
+    <a href="temperature.html">市场温度评分</a> ·
     <a href="risk.html">仓位/止损风控小工具</a></div>
 
   <div class="filters" id="range">

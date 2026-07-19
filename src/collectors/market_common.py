@@ -2,6 +2,10 @@
 
 东财 push2his / 48.push2 等行情主机对海外 Actions runner 拒绝连接,
 这里只依赖已验证可用的主机:query.sse.com.cn、www.szse.cn、www.csindex.com.cn。
+
+深证成指(399001)、创业板指(399006)是深交所自编指数,中证指数网的历史行情接口
+不收录(实测 stock_zh_index_hist_csindex 对这两个 symbol 返回空表),
+sina_em_index_pct_chg 是它们专用的备源(已实测新浪+东财均可用)。
 """
 
 from __future__ import annotations
@@ -63,7 +67,41 @@ def csindex_day(code: str, trade_date: date) -> dict | None:
     if row.empty:
         return None
     row = row.iloc[0]
+    chg = pd.to_numeric(row["涨跌幅"], errors="coerce")
+    if pd.isna(chg):
+        return None
     return {
-        "chg": float(pd.to_numeric(row["涨跌幅"], errors="coerce")),
+        "chg": float(chg),
         "turnover": normalize_to_yuan(pd.to_numeric(row["成交金额"], errors="coerce")),
     }
+
+
+def sina_em_index_pct_chg(symbol: str, trade_date: date) -> float | None:
+    """深成指/创业板指当日涨跌幅(%):新浪(主)→ 东财(备),两个源都只有收盘价、
+    没有现成「涨跌幅」列,用收盘价环比自算(指数不存在除权问题,直接算不需复权)。
+
+    symbol 格式如 "sz399001"、"sz399006"(与 stock_zh_index_daily/_em 的入参一致)。
+    """
+    df = cached_fetch("stock_zh_index_daily", symbol=symbol)
+    if df is None or df.empty:
+        df = cached_fetch("stock_zh_index_daily_em", symbol=symbol)
+    if df is None or df.empty or "date" not in df.columns or "close" not in df.columns:
+        return None
+
+    d = df.copy()
+    d["_d"] = pd.to_datetime(d["date"], errors="coerce").dt.date
+    d["close"] = pd.to_numeric(d["close"], errors="coerce")
+    d = d.dropna(subset=["_d"]).sort_values("_d").reset_index(drop=True)
+
+    matches = d.index[d["_d"] == trade_date]
+    if len(matches) == 0:
+        return None
+    pos = matches[0]
+    if pos == 0:  # 没有更早一天的收盘价可比
+        return None
+
+    today_close = d.loc[pos, "close"]
+    prev_close = d.loc[pos - 1, "close"]
+    if pd.isna(today_close) or pd.isna(prev_close) or prev_close == 0:
+        return None
+    return float((today_close - prev_close) / prev_close * 100)
