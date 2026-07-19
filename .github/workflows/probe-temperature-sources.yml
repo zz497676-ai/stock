@@ -1,0 +1,38 @@
+name: 温度评分数据源连通性探测
+
+# 一次性/按需诊断工具(spec v1.1 第 0 步),只手动触发,不进日常调度。
+# 只读,不 commit、不 push——结果看本次运行的 Job Summary。
+
+on:
+  workflow_dispatch:
+    inputs:
+      date:
+        description: "探测日期 YYYYMMDD(留空=当天,不校验是否交易日)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: 安装依赖
+        run: pip install -r requirements.txt
+
+      - name: 探测候选数据源
+        run: |
+          ARGS=""
+          if [ -n "${{ github.event.inputs.date }}" ]; then
+            ARGS="--date ${{ github.event.inputs.date }}"
+          fi
+          python src/probe_temperature_sources.py $ARGS
