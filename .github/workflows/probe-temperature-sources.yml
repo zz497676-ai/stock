@@ -1,9 +1,19 @@
 name: 温度评分数据源连通性探测
 
-# 一次性/按需诊断工具(spec v1.1 第 0 步),只手动触发,不进日常调度。
+# 一次性/按需诊断工具(spec v1.1 第 0 步),不进日常调度。
 # 只读,不 commit、不 push——结果看本次运行的 Job Summary。
+#
+# workflow_dispatch 要求 workflow 文件先落在默认分支才能被手动触发,这个工具在
+# 合并到 main 前只能靠 push 触发自测,所以额外加了 push 触发,并用 paths 限定只在
+# 改动探测脚本本身时才跑,避免这条分支上其他不相关的提交也触发一次。
 
 on:
+  push:
+    branches:
+      - "claude/a-stock-market-temperature-sfdy5e"
+    paths:
+      - ".github/workflows/probe-temperature-sources.yml"
+      - "src/probe_temperature_sources.py"
   workflow_dispatch:
     inputs:
       date:
