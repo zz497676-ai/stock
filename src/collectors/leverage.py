@@ -45,6 +45,36 @@ def _szse_margin_buy_on(trade_date: date) -> float | None:
     return None
 
 
+def _spot_quote() -> tuple[pd.DataFrame | None, bool]:
+    """全市场行情快照:代码/成交额/流通市值/涨跌幅/振幅。返回 (df, has_mcap)。
+
+    主源东财 stock_zh_a_spot_em 走 82.push2 host,对部分 CI 环境的出口 IP 经常连不上;
+    它内部按页爬全市场、每页间还有随机 sleep+自身重试,连接被reset时即使我们这层
+    超时提前放弃,后台线程也没法真正被杀掉,实测拖慢过整个 workflow 近10分钟,
+    所以这里主动调低其 retries/hard_timeout,让它尽快认输。
+
+    备用源新浪 stock_zh_a_spot,host 不同,但不返回流通市值,只能算"融资买入占
+    成交额%"这一项;"融资余额占流通市值%"和市值过滤阈值在这条路径下不可用。
+    """
+    em = cached_fetch("stock_zh_a_spot_em", retries=1, hard_timeout=20)
+    if em is not None and not em.empty:
+        df = em[["代码", "成交额", "流通市值", "涨跌幅", "振幅"]].copy()
+        return df, True
+
+    sina = cached_fetch("stock_zh_a_spot", retries=1, hard_timeout=45)
+    if sina is not None and not sina.empty:
+        df = sina.copy()
+        df["代码"] = df["代码"].astype(str).str.extract(r"(\d{6})", expand=False)
+        high = pd.to_numeric(df["最高"], errors="coerce")
+        low = pd.to_numeric(df["最低"], errors="coerce")
+        prev_close = pd.to_numeric(df["昨收"], errors="coerce")
+        df["振幅"] = (high - low) / prev_close * 100
+        df["流通市值"] = float("nan")
+        return df[["代码", "成交额", "流通市值", "涨跌幅", "振幅"]], False
+
+    return None, False
+
+
 def _margin_detail_on(trade_date: date) -> tuple[pd.DataFrame | None, date | None]:
     """合并沪深两市个股融资融券明细;明细为 T+1 披露,当日取不到时往前找。"""
     for back in range(0, 4):
@@ -121,30 +151,29 @@ def collect(trade_date: date) -> CollectorResult:
 
     # ---- 个股杠杆排行:融资买入占成交额、融资余额占流通市值 ----
     detail, detail_date = _margin_detail_on(trade_date)
-    # stock_zh_a_spot_em 走东财 82.push2 host,对海外 Actions runner 经常连不上;
-    # 它内部按 ~pz=100 分页抓全市场(实测约200余页),每页间还有随机 sleep+自身重试,
-    # 一旦连接被对面重置,即使我们这层 90s 超时提前放弃,后台线程仍会继续跑很久
-    # (concurrent.futures 无法真正杀死运行中的线程,进程退出前还得等它收尾),
-    # 实测因此拖慢过整个 workflow 近10分钟。这里主动调低 retries/hard_timeout,
-    # 让它尽快认输,不必等两轮完整分页超时。
-    spot = cached_fetch("stock_zh_a_spot_em", retries=1, hard_timeout=20)
+    spot, has_mcap = _spot_quote()
+    # 成交额过小的个股比例噪声大(分母太小),没有流通市值兜底过滤时额外设个下限
+    min_turnover = 3e7
     if detail is not None and spot is not None and not spot.empty:
         spot = spot.copy()
         spot["代码"] = spot["代码"].astype(str)
         detail = detail.copy()
         detail["代码"] = detail["代码"].astype(str)
-        merged = detail.merge(
-            spot[["代码", "成交额", "流通市值", "涨跌幅", "振幅"]], on="代码", how="inner"
-        )
-        merged["流通市值"] = pd.to_numeric(merged["流通市值"], errors="coerce")
+        merged = detail.merge(spot, on="代码", how="inner")
         merged["成交额"] = pd.to_numeric(merged["成交额"], errors="coerce")
-        merged = merged[(merged["流通市值"] >= min_mcap) & (merged["成交额"] > 0)]
+        merged["流通市值"] = pd.to_numeric(merged["流通市值"], errors="coerce")
+        if has_mcap:
+            merged = merged[(merged["流通市值"] >= min_mcap) & (merged["成交额"] > 0)]
+        else:
+            merged = merged[merged["成交额"] >= min_turnover]
         if not merged.empty:
             merged["融资买入占成交额%"] = (
                 pd.to_numeric(merged["融资买入额"], errors="coerce") / merged["成交额"] * 100
             )
             merged["融资余额占流通市值%"] = (
                 pd.to_numeric(merged["融资余额"], errors="coerce") / merged["流通市值"] * 100
+                if has_mcap
+                else float("nan")
             )
             full = merged[
                 ["代码", "名称", "融资买入占成交额%", "融资余额占流通市值%", "涨跌幅", "振幅"]
@@ -156,18 +185,24 @@ def collect(trade_date: date) -> CollectorResult:
             r.full_table = full  # 全量:供网页按个股代码查询用,不进日报
 
             show = full.head(top_n)
-            alert_count = int((full["融资余额占流通市值%"] >= alert_pct).sum())
-            r.metrics["leverage_top_alert_count"] = alert_count
             r.tables.append(
                 (f"当日杠杆最集中个股(前{len(show)}只,{detail_date.isoformat()}两融数据)", show)
             )
-            r.evidence.append(
-                f"当日纳入统计的{len(full)}只个股中,{alert_count}只融资余额占流通市值超过"
-                f"{alert_pct:.0f}%(阈值见 config.yaml);建议持有这类个股时使用更紧的止损比例"
-                "(参考仓位/止损计算器,该工具支持按代码查询个股杠杆水位)。"
-            )
+            if has_mcap:
+                alert_count = int((full["融资余额占流通市值%"] >= alert_pct).sum())
+                r.metrics["leverage_top_alert_count"] = alert_count
+                r.evidence.append(
+                    f"当日纳入统计的{len(full)}只个股中,{alert_count}只融资余额占流通市值超过"
+                    f"{alert_pct:.0f}%(阈值见 config.yaml);建议持有这类个股时使用更紧的止损比例"
+                    "(参考仓位/止损计算器,该工具支持按代码查询个股杠杆水位)。"
+                )
+            else:
+                r.evidence.append(
+                    f"当日纳入统计的{len(full)}只个股按融资买入占成交额比重排行(见下表);"
+                    "行情快照取自备用数据源,不含流通市值,'融资余额占流通市值%'与市值过滤本次不可用。"
+                )
         else:
-            r.notes.append("个股两融明细与行情匹配后,没有满足流通市值门槛的样本。")
+            r.notes.append("个股两融明细与行情匹配后,没有满足过滤条件的样本。")
     else:
         missing = [n for n, v in (("个股两融明细", detail), ("实时行情快照", spot)) if v is None]
         r.notes.append(f"{'、'.join(missing)}接口今日不可用,个股杠杆排行暂缺(不影响市场整体水位)。")
