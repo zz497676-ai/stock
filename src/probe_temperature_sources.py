@@ -30,6 +30,7 @@ class Probe:
     note: str                # 中文说明 / 探测目的
     kwargs: Callable[[date], dict]  # 按探测日期构造调用参数
     is_prod: bool = False    # True = 本仓库其他 collector 已在生产验证过,这里只做回归确认
+    detail: bool = False     # True = 额外打印完整列名 + 前几行样例,供写采集器时核对字段名
 
 
 def _ymd(d: date) -> str:
@@ -38,12 +39,13 @@ def _ymd(d: date) -> str:
 
 PROBES: list[Probe] = [
     # ---- 情绪强度 / 涨跌停家数:核心待验证接口,均挂在东财 push2ex,未在本仓库实测过 ----
-    Probe("stock_zt_pool_em", "涨停股池(家数+连板数字段)", lambda d: {"date": _ymd(d)}),
-    Probe("stock_zt_pool_dtgc_em", "跌停股池", lambda d: {"date": _ymd(d)}),
-    Probe("stock_zt_pool_zbgc_em", "炸板股池(封板率分子分母)", lambda d: {"date": _ymd(d)}),
-    Probe("stock_zt_pool_previous_em", "昨日涨停股池(打板赚钱效应)", lambda d: {"date": _ymd(d)}),
+    # detail=True: 已确认可用,这轮把完整列名+样例行打出来,供写采集器时核对字段名(而非凭记忆猜测)
+    Probe("stock_zt_pool_em", "涨停股池(家数+连板数字段)", lambda d: {"date": _ymd(d)}, detail=True),
+    Probe("stock_zt_pool_dtgc_em", "跌停股池", lambda d: {"date": _ymd(d)}, detail=True),
+    Probe("stock_zt_pool_zbgc_em", "炸板股池(封板率分子分母)", lambda d: {"date": _ymd(d)}, detail=True),
+    Probe("stock_zt_pool_previous_em", "昨日涨停股池(打板赚钱效应)", lambda d: {"date": _ymd(d)}, detail=True),
     # ---- 涨跌家数占比的备源(乐咕不挂东财域名,单独探测连通性) ----
-    Probe("stock_market_activity_legu", "乐咕赚钱效应快照(涨跌/涨停/跌停家数备源)", lambda d: {}),
+    Probe("stock_market_activity_legu", "乐咕赚钱效应快照(涨跌/涨停/跌停家数备源)", lambda d: {}, detail=True),
     # ---- 全市场快照:leverage.py 里已知东财源在 Actions 上不稳,这里回归确认+新浪备源 ----
     Probe("stock_zh_a_spot_em", "东财全市场快照(leverage.py 已知不稳,回归确认)", lambda d: {}),
     Probe("stock_zh_a_spot", "新浪全市场快照(涨跌家数占比备源)", lambda d: {}),
@@ -76,6 +78,11 @@ PROBES: list[Probe] = [
     # ---- 若上面三个中证指数网探测失败,备用候选源(东财/新浪各一个,主机不同于 push2ex 系列) ----
     Probe("stock_zh_index_daily_em", "上证综指备源候选(东财,主机与涨停池不同)", lambda d: {"symbol": "sh000001"}),
     Probe("stock_zh_index_daily", "上证综指备源候选(新浪)", lambda d: {"symbol": "sh000001"}),
+    # ---- 深证成指/创业板指实际会用到的备源 symbol,上一轮只测了 sh000001,这轮补测真实 symbol ----
+    Probe("stock_zh_index_daily", "深证成指备源(新浪,实际 symbol)", lambda d: {"symbol": "sz399001"}),
+    Probe("stock_zh_index_daily", "创业板指备源(新浪,实际 symbol)", lambda d: {"symbol": "sz399006"}),
+    Probe("stock_zh_index_daily_em", "深证成指备源(东财,实际 symbol)", lambda d: {"symbol": "sz399001"}),
+    Probe("stock_zh_index_daily_em", "创业板指备源(东财,实际 symbol)", lambda d: {"symbol": "sz399006"}),
 ]
 
 
@@ -89,7 +96,7 @@ def _run_one(p: Probe, trade_date: date) -> dict:
 
     if df is not None and not df.empty:
         cols = list(df.columns)[:8]
-        return {
+        result = {
             "ok": True,
             "empty": False,
             "elapsed": elapsed,
@@ -98,6 +105,11 @@ def _run_one(p: Probe, trade_date: date) -> dict:
             "kwargs": kwargs,
             "err": "",
         }
+        if p.detail:
+            sample = df.head(2).astype(str)
+            result["full_cols"] = list(df.columns)
+            result["sample_rows"] = sample.to_dict(orient="records")
+        return result
     if df is not None:
         return {
             "ok": True,
@@ -143,6 +155,17 @@ def render_markdown(trade_date: date, results: list[tuple[Probe, dict]]) -> str:
         lines.append("")
         lines.append("### 失败 / 异常详情")
         lines.extend(detail_lines)
+
+    field_probes = [(p, r) for p, r in results if p.detail and r.get("full_cols")]
+    if field_probes:
+        lines.append("")
+        lines.append("### 字段详情(写采集器用,核对真实列名而非凭记忆)")
+        for p, r in field_probes:
+            lines.append("")
+            lines.append(f"**`{p.func_name}`**({p.note})")
+            lines.append(f"- 完整列名:{r['full_cols']}")
+            for i, row in enumerate(r["sample_rows"]):
+                lines.append(f"- 样例行 {i}:{row}")
 
     ok_count = sum(1 for _, r in results if r["ok"] and not r["empty"])
     lines.append("")
