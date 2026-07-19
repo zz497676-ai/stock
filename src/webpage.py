@@ -12,7 +12,7 @@ from datetime import date
 
 import pandas as pd
 
-from utils import ROOT, load_history
+from utils import ROOT, load_config, load_history
 
 PARTICIPANTS = [
     ("national_team", "国家队"),
@@ -31,6 +31,7 @@ TRENDS = [
     ("etf", "mutual_fund", "etf_shares_chg", "全市场ETF份额日变动(公募申赎代理)", 1e8, "亿份"),
     ("lhb", "hot_money", "lhb_net_buy", "龙虎榜整体净买额", 1e8, "亿元"),
     ("block", "industrial", "block_trade_premium_pct", "大宗交易溢价成交占比", 1.0, "%"),
+    ("leverage", "leverage", "leverage_pct", "两融资金参与度(杠杆水位代理)", 1.0, "%"),
 ]
 
 
@@ -59,11 +60,21 @@ def _collect_data(trade_date: date) -> dict:
             for _, row in df.dropna().sort_values("date").iterrows():
                 pts.append({"d": row["date"], "v": round(float(row[col]) / div, 3)})
         trends[tid] = {"title": title, "unit": unit, "points": pts}
+
+    leverage_top = []
+    top_path = ROOT / load_config()["data_dir"] / "leverage_top.csv"
+    if top_path.exists():
+        top_df = pd.read_csv(top_path, dtype={"代码": str})
+        leverage_top = top_df.to_dict("records")
+    leverage_alert_pct = float(load_config().get("leverage", {}).get("balance_ratio_alert_pct", 8.0))
+
     return {
         "generated": trade_date.isoformat(),
         "participants": [{"key": k, "title": t} for k, t in PARTICIPANTS],
         "verdicts": verdicts,
         "trends": trends,
+        "leverage_top": leverage_top,
+        "leverage_alert_pct": leverage_alert_pct,
     }
 
 
@@ -80,6 +91,34 @@ def write_page(trade_date: date, out_dir=None) -> None:
     out = (out_dir or (ROOT / "docs"))
     out.mkdir(parents=True, exist_ok=True)
     (out / "index.html").write_text(render_page(trade_date), encoding="utf-8")
+
+
+def write_leverage_data(out_dir=None) -> None:
+    """把全量个股杠杆数据导出成 docs/leverage_data.json,供 risk.html 按代码查询单只持仓的杠杆水位。
+
+    只含当日快照(不是历史时间序列),按代码建索引,体积小、查询是 O(1)。
+    """
+    out = (out_dir or (ROOT / "docs"))
+    out.mkdir(parents=True, exist_ok=True)
+    all_path = ROOT / load_config()["data_dir"] / "leverage_all.csv"
+    by_code: dict = {}
+    if all_path.exists():
+        df = pd.read_csv(all_path, dtype={"代码": str})
+        for _, row in df.iterrows():
+            by_code[row["代码"]] = {
+                "name": row["名称"],
+                "buy_ratio": None if pd.isna(row["融资买入占成交额%"]) else float(row["融资买入占成交额%"]),
+                "balance_ratio": None if pd.isna(row["融资余额占流通市值%"]) else float(row["融资余额占流通市值%"]),
+                "chg_pct": None if pd.isna(row["当日涨跌幅%"]) else float(row["当日涨跌幅%"]),
+                "amplitude_pct": None if pd.isna(row["当日振幅%"]) else float(row["当日振幅%"]),
+            }
+    payload = {
+        "alert_pct": float(load_config().get("leverage", {}).get("balance_ratio_alert_pct", 8.0)),
+        "stocks": by_code,
+    }
+    (out / "leverage_data.json").write_text(
+        json.dumps(payload, ensure_ascii=False), encoding="utf-8"
+    )
 
 
 HTML_TEMPLATE = """<!doctype html>
@@ -123,6 +162,13 @@ h1 { font-size: 22px; margin: 0 0 4px; }
 @media (max-width: 720px) { .grid2 { grid-template-columns: 1fr; } }
 svg { display: block; width: 100%; height: auto; }
 svg text { font-family: inherit; fill: var(--ink); }
+.tblwrap { overflow-x: auto; }
+table.lev { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 480px; }
+table.lev th, table.lev td { padding: 6px 8px; border-bottom: 1px solid var(--ring); text-align: right; white-space: nowrap; }
+table.lev th:first-child, table.lev td:first-child,
+table.lev th:nth-child(2), table.lev td:nth-child(2) { text-align: left; }
+table.lev th { color: var(--mut); font-weight: 600; }
+table.lev tr.alert td { color: var(--inflow); }
 .tt { position: fixed; pointer-events: none; background: var(--surface); color: var(--ink);
   border: 1px solid var(--ring); border-radius: 8px; padding: 8px 10px; font-size: 12px;
   box-shadow: 0 4px 14px rgba(0,0,0,.12); max-width: 320px; display: none; z-index: 9; line-height: 1.5; }
@@ -135,7 +181,8 @@ a { color: var(--outflow); }
 <div class="wrap">
   <h1>A股资金动向看板</h1>
   <div class="sub">数据截至 __DATE__ · 每交易日自动更新 ·
-    <a id="report-link" href="#">查看当日文字日报</a></div>
+    <a id="report-link" href="#">查看当日文字日报</a> ·
+    <a href="risk.html">仓位/止损风控小工具</a></div>
 
   <div class="filters" id="range">
     <button data-n="7">近7日</button>
@@ -157,6 +204,14 @@ a { color: var(--outflow); }
   </div>
 
   <div class="grid2" id="trends"></div>
+
+  <div class="card">
+    <h2>当日个股杠杆排行</h2>
+    <div class="hint">融资买入占成交额比重最高的个股 · 国家队现金申购不加杠杆,这里主要是散户/游资的两融行为 ·
+      标红=融资余额占流通市值超过预警阈值 ·
+      <a href="risk.html">用仓位/止损计算器给这类股票设更紧的止损</a></div>
+    <div class="tblwrap" id="leverage-top"></div>
+  </div>
 
   <div class="card foot">
     <b>数据说明</b>:高置信=每日硬数据(龙虎榜/公告/两融);中=每日代理指标(行为推断);
@@ -338,8 +393,30 @@ function drawTrends(rangeN) {
   }
 }
 
+// ---- 当日个股杠杆排行 ----
+function drawLeverageTop() {
+  const box = document.getElementById("leverage-top"); box.innerHTML = "";
+  const rows = DATA.leverage_top || [];
+  if (!rows.length) {
+    box.innerHTML = '<div style="color:var(--mut);font-size:13px">暂无数据(两融明细或行情快照接口当日不可用)</div>';
+    return;
+  }
+  const cols = ["代码", "名称", "融资买入占成交额%", "融资余额占流通市值%", "当日涨跌幅%", "当日振幅%"];
+  const table = document.createElement("table"); table.className = "lev";
+  const thead = document.createElement("tr");
+  cols.forEach(h => { const th = document.createElement("th"); th.textContent = h; thead.appendChild(th); });
+  table.appendChild(thead);
+  rows.forEach(row => {
+    const tr = document.createElement("tr");
+    if (Number(row["融资余额占流通市值%"]) >= DATA.leverage_alert_pct) tr.className = "alert";
+    cols.forEach(k => { const td = document.createElement("td"); td.textContent = row[k]; tr.appendChild(td); });
+    table.appendChild(tr);
+  });
+  box.appendChild(table);
+}
+
 let range = 30;
-function redraw() { drawOverview(); drawMatrix(range); drawTrends(range); }
+function redraw() { drawOverview(); drawMatrix(range); drawTrends(range); drawLeverageTop(); }
 document.getElementById("range").addEventListener("click", ev => {
   const b = ev.target.closest("button"); if (!b) return;
   range = +b.dataset.n;

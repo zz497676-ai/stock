@@ -39,6 +39,13 @@ h1 { font-size: 22px; margin: 0 0 4px; }
 @media (max-width: 720px) { .grid2 { grid-template-columns: 1fr; } }
 svg { display: block; width: 100%; height: auto; }
 svg text { font-family: inherit; fill: var(--ink); }
+.tblwrap { overflow-x: auto; }
+table.lev { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 480px; }
+table.lev th, table.lev td { padding: 6px 8px; border-bottom: 1px solid var(--ring); text-align: right; white-space: nowrap; }
+table.lev th:first-child, table.lev td:first-child,
+table.lev th:nth-child(2), table.lev td:nth-child(2) { text-align: left; }
+table.lev th { color: var(--mut); font-weight: 600; }
+table.lev tr.alert td { color: var(--inflow); }
 .tt { position: fixed; pointer-events: none; background: var(--surface); color: var(--ink);
   border: 1px solid var(--ring); border-radius: 8px; padding: 8px 10px; font-size: 12px;
   box-shadow: 0 4px 14px rgba(0,0,0,.12); max-width: 320px; display: none; z-index: 9; line-height: 1.5; }
@@ -51,7 +58,8 @@ a { color: var(--outflow); }
 <div class="wrap">
   <h1>A股资金动向看板</h1>
   <div class="sub">数据截至 2026-07-17 · 每交易日自动更新 ·
-    <a id="report-link" href="#">查看当日文字日报</a></div>
+    <a id="report-link" href="#">查看当日文字日报</a> ·
+    <a href="risk.html">仓位/止损风控小工具</a></div>
 
   <div class="filters" id="range">
     <button data-n="7">近7日</button>
@@ -74,6 +82,14 @@ a { color: var(--outflow); }
 
   <div class="grid2" id="trends"></div>
 
+  <div class="card">
+    <h2>当日个股杠杆排行</h2>
+    <div class="hint">融资买入占成交额比重最高的个股 · 国家队现金申购不加杠杆,这里主要是散户/游资的两融行为 ·
+      标红=融资余额占流通市值超过预警阈值 ·
+      <a href="risk.html">用仓位/止损计算器给这类股票设更紧的止损</a></div>
+    <div class="tblwrap" id="leverage-top"></div>
+  </div>
+
   <div class="card foot">
     <b>数据说明</b>:高置信=每日硬数据(龙虎榜/公告/两融);中=每日代理指标(行为推断);
     低=仅低频或间接证据。险资/社保、主观私募无每日公开数据;国家队与量化为行为推断,
@@ -82,7 +98,7 @@ a { color: var(--outflow); }
 </div>
 <div class="tt" id="tt"></div>
 <script>
-const DATA = {"generated": "2026-07-17", "participants": [{"key": "national_team", "title": "国家队"}, {"key": "insurance_social", "title": "险资与社保"}, {"key": "mutual_fund", "title": "公募基金"}, {"key": "quant", "title": "量化资金"}, {"key": "hot_money", "title": "游资"}, {"key": "industrial", "title": "产业资本"}, {"key": "retail", "title": "普通散户"}], "verdicts": [{"date": "2026-07-15", "key": "national_team", "strength": 0, "confidence": "低", "summary": ""}, {"date": "2026-07-15", "key": "insurance_social", "strength": 0, "confidence": "低", "summary": ""}, {"date": "2026-07-15", "key": "mutual_fund", "strength": null, "confidence": "低", "summary": ""}, {"date": "2026-07-15", "key": "quant", "strength": 0, "confidence": "低", "summary": ""}, {"date": "2026-07-15", "key": "hot_money", "strength": 1, "confidence": "高", "summary": ""}, {"date": "2026-07-15", "key": "industrial", "strength": 0, "confidence": "高", "summary": ""}, {"date": "2026-07-15", "key": "retail", "strength": -1, "confidence": "高", "summary": ""}, {"date": "2026-07-16", "key": "mutual_fund", "strength": 0, "confidence": "中", "summary": ""}, {"date": "2026-07-16", "key": "insurance_social", "strength": 0, "confidence": "低", "summary": ""}, {"date": "2026-07-16", "key": "retail", "strength": -1, "confidence": "高", "summary": ""}, {"date": "2026-07-16", "key": "hot_money", "strength": 0, "confidence": "高", "summary": ""}, {"date": "2026-07-16", "key": "national_team", "strength": 0, "confidence": "低", "summary": ""}, {"date": "2026-07-16", "key": "quant", "strength": 0, "confidence": "低", "summary": ""}, {"date": "2026-07-16", "key": "industrial", "strength": 0, "confidence": "高", "summary": ""}, {"date": "2026-07-17", "key": "national_team", "strength": 0, "confidence": "低", "summary": "ETF成交已记录,放量基线累积中(约需一个月),暂不判断方向。"}, {"date": "2026-07-17", "key": "insurance_social", "strength": 0, "confidence": "低", "summary": "无涉险资/社保公告;险资无每日数据,默认视为中性。"}, {"date": "2026-07-17", "key": "mutual_fund", "strength": 1, "confidence": "中", "summary": "全市场ETF份额环比 +0.52%(申赎代理);近7天新发权益基金 0亿份。"}, {"date": "2026-07-17", "key": "quant", "strength": 0, "confidence": "低", "summary": "小微盘成交占比 15.5%,均值基线待历史累积。"}, {"date": "2026-07-17", "key": "hot_money", "strength": 0, "confidence": "高", "summary": "知名游资席位 4 个上榜,合计净买入 -0.1亿。"}, {"date": "2026-07-17", "key": "industrial", "strength": 1, "confidence": "高", "summary": "回购公告 12 家;大宗溢价成交占比 32%。"}, {"date": "2026-07-17", "key": "retail", "strength": -1, "confidence": "高", "summary": "沪市融资余额环比 -380亿。"}], "trends": {"margin": {"title": "全市场融资余额", "unit": "万亿元", "points": [{"d": "2026-07-15", "v": 2.858}, {"d": "2026-07-16", "v": 2.858}, {"d": "2026-07-17", "v": 2.791}]}, "micro": {"title": "小微盘成交占比(量化活跃度代理)", "unit": "%", "points": [{"d": "2026-07-15", "v": 15.351}, {"d": "2026-07-16", "v": 15.715}, {"d": "2026-07-17", "v": 15.547}]}, "hot": {"title": "知名游资席位净买入", "unit": "亿元", "points": [{"d": "2026-07-15", "v": 2.664}, {"d": "2026-07-16", "v": -0.047}, {"d": "2026-07-17", "v": -0.072}]}, "etf": {"title": "全市场ETF份额日变动(公募申赎代理)", "unit": "亿份", "points": [{"d": "2026-07-16", "v": -4.233}, {"d": "2026-07-17", "v": 159.239}]}, "lhb": {"title": "龙虎榜整体净买额", "unit": "亿元", "points": [{"d": "2026-07-15", "v": 7.025}, {"d": "2026-07-16", "v": 12.832}, {"d": "2026-07-17", "v": 5.317}]}, "block": {"title": "大宗交易溢价成交占比", "unit": "%", "points": [{"d": "2026-07-15", "v": 19.097}, {"d": "2026-07-16", "v": 11.064}, {"d": "2026-07-17", "v": 31.664}]}}};
+const DATA = {"generated": "2026-07-17", "participants": [{"key": "national_team", "title": "国家队"}, {"key": "insurance_social", "title": "险资与社保"}, {"key": "mutual_fund", "title": "公募基金"}, {"key": "quant", "title": "量化资金"}, {"key": "hot_money", "title": "游资"}, {"key": "industrial", "title": "产业资本"}, {"key": "retail", "title": "普通散户"}], "verdicts": [{"date": "2026-07-15", "key": "national_team", "strength": 0, "confidence": "低", "summary": ""}, {"date": "2026-07-15", "key": "insurance_social", "strength": 0, "confidence": "低", "summary": ""}, {"date": "2026-07-15", "key": "mutual_fund", "strength": null, "confidence": "低", "summary": ""}, {"date": "2026-07-15", "key": "quant", "strength": 0, "confidence": "低", "summary": ""}, {"date": "2026-07-15", "key": "hot_money", "strength": 1, "confidence": "高", "summary": ""}, {"date": "2026-07-15", "key": "industrial", "strength": 0, "confidence": "高", "summary": ""}, {"date": "2026-07-15", "key": "retail", "strength": -1, "confidence": "高", "summary": ""}, {"date": "2026-07-16", "key": "industrial", "strength": 0, "confidence": "高", "summary": ""}, {"date": "2026-07-16", "key": "quant", "strength": 0, "confidence": "低", "summary": ""}, {"date": "2026-07-16", "key": "national_team", "strength": 0, "confidence": "低", "summary": ""}, {"date": "2026-07-16", "key": "hot_money", "strength": 0, "confidence": "高", "summary": ""}, {"date": "2026-07-16", "key": "retail", "strength": -1, "confidence": "高", "summary": ""}, {"date": "2026-07-16", "key": "insurance_social", "strength": 0, "confidence": "低", "summary": ""}, {"date": "2026-07-16", "key": "mutual_fund", "strength": 0, "confidence": "中", "summary": ""}, {"date": "2026-07-17", "key": "national_team", "strength": 0, "confidence": "低", "summary": "ETF成交已记录,放量基线累积中(约需一个月),暂不判断方向。"}, {"date": "2026-07-17", "key": "insurance_social", "strength": 0, "confidence": "低", "summary": "无涉险资/社保公告;险资无每日数据,默认视为中性。"}, {"date": "2026-07-17", "key": "mutual_fund", "strength": 1, "confidence": "中", "summary": "全市场ETF份额环比 +0.39%(申赎代理);近7天新发权益基金 0亿份。"}, {"date": "2026-07-17", "key": "quant", "strength": 0, "confidence": "低", "summary": "小微盘成交占比 15.5%,均值基线待历史累积。"}, {"date": "2026-07-17", "key": "hot_money", "strength": 0, "confidence": "高", "summary": "知名游资席位 4 个上榜,合计净买入 -0.1亿。"}, {"date": "2026-07-17", "key": "industrial", "strength": 1, "confidence": "高", "summary": "回购公告 12 家;大宗溢价成交占比 32%。"}, {"date": "2026-07-17", "key": "retail", "strength": -1, "confidence": "高", "summary": "沪市融资余额环比 -380亿。"}], "trends": {"margin": {"title": "全市场融资余额", "unit": "万亿元", "points": [{"d": "2026-07-15", "v": 2.858}, {"d": "2026-07-16", "v": 2.858}, {"d": "2026-07-17", "v": 2.791}]}, "micro": {"title": "小微盘成交占比(量化活跃度代理)", "unit": "%", "points": [{"d": "2026-07-15", "v": 15.351}, {"d": "2026-07-16", "v": 15.715}, {"d": "2026-07-17", "v": 15.547}]}, "hot": {"title": "知名游资席位净买入", "unit": "亿元", "points": [{"d": "2026-07-15", "v": 2.664}, {"d": "2026-07-16", "v": -0.047}, {"d": "2026-07-17", "v": -0.072}]}, "etf": {"title": "全市场ETF份额日变动(公募申赎代理)", "unit": "亿份", "points": [{"d": "2026-07-16", "v": -4.233}, {"d": "2026-07-17", "v": 120.356}]}, "lhb": {"title": "龙虎榜整体净买额", "unit": "亿元", "points": [{"d": "2026-07-15", "v": 7.025}, {"d": "2026-07-16", "v": 12.832}, {"d": "2026-07-17", "v": 5.317}]}, "block": {"title": "大宗交易溢价成交占比", "unit": "%", "points": [{"d": "2026-07-15", "v": 19.097}, {"d": "2026-07-16", "v": 11.064}, {"d": "2026-07-17", "v": 31.664}]}, "leverage": {"title": "两融资金参与度(杠杆水位代理)", "unit": "%", "points": [{"d": "2026-07-17", "v": 7.853}]}}, "leverage_top": [], "leverage_alert_pct": 8.0};
 const NS = "http://www.w3.org/2000/svg";
 const ARROW = s => s===null ? "— 数据不足" :
   ({"-2":"↓↓ 大幅流出","-1":"↓ 流出","0":"→ 中性","1":"↑ 流入","2":"↑↑ 大幅流入"})[String(s)];
@@ -254,8 +270,30 @@ function drawTrends(rangeN) {
   }
 }
 
+// ---- 当日个股杠杆排行 ----
+function drawLeverageTop() {
+  const box = document.getElementById("leverage-top"); box.innerHTML = "";
+  const rows = DATA.leverage_top || [];
+  if (!rows.length) {
+    box.innerHTML = '<div style="color:var(--mut);font-size:13px">暂无数据(两融明细或行情快照接口当日不可用)</div>';
+    return;
+  }
+  const cols = ["代码", "名称", "融资买入占成交额%", "融资余额占流通市值%", "当日涨跌幅%", "当日振幅%"];
+  const table = document.createElement("table"); table.className = "lev";
+  const thead = document.createElement("tr");
+  cols.forEach(h => { const th = document.createElement("th"); th.textContent = h; thead.appendChild(th); });
+  table.appendChild(thead);
+  rows.forEach(row => {
+    const tr = document.createElement("tr");
+    if (Number(row["融资余额占流通市值%"]) >= DATA.leverage_alert_pct) tr.className = "alert";
+    cols.forEach(k => { const td = document.createElement("td"); td.textContent = row[k]; tr.appendChild(td); });
+    table.appendChild(tr);
+  });
+  box.appendChild(table);
+}
+
 let range = 30;
-function redraw() { drawOverview(); drawMatrix(range); drawTrends(range); }
+function redraw() { drawOverview(); drawMatrix(range); drawTrends(range); drawLeverageTop(); }
 document.getElementById("range").addEventListener("click", ev => {
   const b = ev.target.closest("button"); if (!b) return;
   range = +b.dataset.n;
