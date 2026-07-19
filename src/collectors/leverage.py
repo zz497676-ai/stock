@@ -121,7 +121,13 @@ def collect(trade_date: date) -> CollectorResult:
 
     # ---- 个股杠杆排行:融资买入占成交额、融资余额占流通市值 ----
     detail, detail_date = _margin_detail_on(trade_date)
-    spot = cached_fetch("stock_zh_a_spot_em")
+    # stock_zh_a_spot_em 走东财 82.push2 host,对海外 Actions runner 经常连不上;
+    # 它内部按 ~pz=100 分页抓全市场(实测约200余页),每页间还有随机 sleep+自身重试,
+    # 一旦连接被对面重置,即使我们这层 90s 超时提前放弃,后台线程仍会继续跑很久
+    # (concurrent.futures 无法真正杀死运行中的线程,进程退出前还得等它收尾),
+    # 实测因此拖慢过整个 workflow 近10分钟。这里主动调低 retries/hard_timeout,
+    # 让它尽快认输,不必等两轮完整分页超时。
+    spot = cached_fetch("stock_zh_a_spot_em", retries=1, hard_timeout=20)
     if detail is not None and spot is not None and not spot.empty:
         spot = spot.copy()
         spot["代码"] = spot["代码"].astype(str)
