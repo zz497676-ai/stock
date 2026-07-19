@@ -173,6 +173,27 @@ def render_markdown(trade_date: date, results: list[tuple[Probe, dict]]) -> str:
     return "\n".join(lines)
 
 
+def run_collector_check(trade_date: date) -> str:
+    """在裸接口探测之外,额外拿真实(非 mock)数据实跑一遍 collectors.temperature.collect(),
+    验证采集器的解析逻辑(字段名、类型转换、ST 剔除等)在真实响应下不会报错——
+    仅打印结果,不写 data/temperature.csv,不影响正式流程。
+    """
+    lines = ["", "## 温度采集器真实数据试跑(collectors.temperature.collect,只读不落盘)", ""]
+    try:
+        from collectors.temperature import collect
+
+        result = collect(trade_date)
+        lines.append(f"- raw: `{result['raw']}`")
+        lines.append(f"- missing: `{result['missing']}`")
+        if result["missing"]:
+            lines.append(f"- ⚠️ {len(result['missing'])} 项指标当日缺席(可能是当日行情特征,也可能是接口问题,人工核对)")
+        else:
+            lines.append("- ✅ 12 项指标全部采集成功")
+    except Exception as e:  # noqa: BLE001 探测脚本本身要能撑住采集器的任何异常
+        lines.append(f"- ❌ 采集器抛出异常:{type(e).__name__}: {e}")
+    return "\n".join(lines)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="温度评分候选数据源连通性探测(只读,不落盘)")
     parser.add_argument("--date", help="探测日期 YYYYMMDD,默认北京时间今天(不检查是否交易日)")
@@ -183,6 +204,10 @@ def main() -> int:
     results = probe_all(d)
     report = render_markdown(d, results)
     print(report)
+
+    collector_report = run_collector_check(d)
+    print(collector_report)
+    report += "\n" + collector_report
 
     summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
     if summary_path:
