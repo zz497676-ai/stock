@@ -194,6 +194,32 @@ def run_collector_check(trade_date: date) -> str:
     return "\n".join(lines)
 
 
+def run_cross_validation(trade_date: date) -> str:
+    """涨跌停家数交叉验证:东方财富涨停/跌停池(逐股统计)vs 乐咕赚钱效应(独立数据商的
+    现成统计口径)。两家公司各自抓取/统计,数字完全一致不现实(ST剔除、统计时点、
+    北交所口径都可能有差异),但应该在同一量级、大方向一致;差太多才值得警惕。
+    只做数字对照打印,不判定对错(没有一个客观"标准答案"可比,只能人工看是否离谱)。
+    """
+    lines = ["", "## 涨跌停家数交叉验证(东方财富 vs 乐咕,两个独立数据源)", ""]
+    try:
+        from collectors.temperature import _legu_value, _pool
+
+        zt = _pool("stock_zt_pool_em", trade_date)
+        dt = _pool("stock_zt_pool_dtgc_em", trade_date)
+        em_up = None if zt is None else len(zt)
+        em_down = None if dt is None else len(dt)
+        legu_up_raw = _legu_value(["涨停", "涨停家数"])
+        legu_down_raw = _legu_value(["跌停", "跌停家数"])
+        legu_up = int(legu_up_raw) if legu_up_raw is not None else None
+        legu_down = int(legu_down_raw) if legu_down_raw is not None else None
+
+        lines.append(f"- 涨停家数:东方财富(剔除ST)= {em_up},乐咕(未剔除ST)= {legu_up}")
+        lines.append(f"- 跌停家数:东方财富(剔除ST)= {em_down},乐咕(未剔除ST)= {legu_down}")
+    except Exception as e:  # noqa: BLE001 探测脚本本身要能撑住任何异常
+        lines.append(f"- ❌ 交叉验证脚本异常:{type(e).__name__}: {e}")
+    return "\n".join(lines)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="温度评分候选数据源连通性探测(只读,不落盘)")
     parser.add_argument("--date", help="探测日期 YYYYMMDD,默认北京时间今天(不检查是否交易日)")
@@ -208,6 +234,10 @@ def main() -> int:
     collector_report = run_collector_check(d)
     print(collector_report)
     report += "\n" + collector_report
+
+    cross_report = run_cross_validation(d)
+    print(cross_report)
+    report += "\n" + cross_report
 
     summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
     if summary_path:
