@@ -128,7 +128,7 @@ def run(trade_date: date, mock: bool = False, skip_calendar: bool = False) -> in
             from webpage import write_leverage_data, write_page, write_temperature_data
 
             write_page(trade_date)
-            write_leverage_data()
+            write_leverage_data(detail_date=lev.detail_date)
             write_temperature_data()
             print("[web] docs/index.html、docs/leverage_data.json、docs/temperature_data.json 已更新")
         except Exception as e:  # noqa: BLE001 网页失败不影响日报

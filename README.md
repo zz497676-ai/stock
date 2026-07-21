@@ -57,6 +57,78 @@
 - **持仓监控**:手动记录持仓成本价、现价、数量,实时计算浮动盈亏,浮亏达到阈值自动标红提醒止损;
   持仓代码命中当日个股杠杆数据时会自动显示该股的杠杆水位(联网加载每日快照,只读,不上传持仓)。
 
+## 个股数据的本地拉取
+
+GitHub Actions 跑在境外机房,访问不到东财/沪深交易所的行情与两融明细接口,所以 CI 产出的
+`docs/leverage_data.json` 长期是空的,`risk.html` 的"杠杆"列和"当前杠杆数据日期"会显示"—"。
+解决办法:在你自己电脑或国内服务器上,每个交易日收盘后跑一次
+[`scripts/fetch_margin_local.py`](scripts/fetch_margin_local.py),它和 CI 共用同一份
+`build_stock_table()` 逻辑(见 `src/collectors/leverage.py`),把当天的杠杆数据补上、推送,
+gh-pages 会自动重新发布(`.github/workflows/deploy-on-data-push.yml`)。
+
+**安装**(一次性):
+
+```bash
+git clone https://github.com/zz497676-ai/stock.git
+cd stock
+pip install -r requirements.txt   # akshare + pandas + PyYAML
+```
+
+**手动跑一次**:
+
+```bash
+python scripts/fetch_margin_local.py                # 拉今天的数据,提交推送
+python scripts/fetch_margin_local.py --date 20260720 # 补跑指定日
+python scripts/fetch_margin_local.py --mock          # 离线假数据自测(不提交)
+python scripts/fetch_margin_local.py --no-push       # 只生成文件,不 git 提交
+```
+
+拉不到数据时脚本会明确报错、不写文件、不提交(退出码 1),不会留下半成品覆盖旧数据。
+
+**定时任务**(三选一,挑你机器对应的那条):
+
+- **Linux / macOS**(cron,每个交易日 18:30 北京时间 = 10:30 UTC 跑):
+
+  ```cron
+  30 10 * * 1-5 cd /path/to/stock && /usr/bin/python3 scripts/fetch_margin_local.py >> /tmp/fetch_margin.log 2>&1
+  ```
+
+- **Windows**(任务计划程序,PowerShell 创建一个每个工作日 18:30 触发的任务):
+
+  ```powershell
+  $a = New-ScheduledTaskAction -Execute "python.exe" `
+      -Argument "scripts\fetch_margin_local.py" -WorkingDirectory "C:\path\to\stock"
+  $t = New-ScheduledTaskTrigger -Weekly -DaysOfWeek Monday,Tuesday,Wednesday,Thursday,Friday -At 18:30
+  Register-ScheduledTask -TaskName "FetchMargin" -Action $a -Trigger $t
+  ```
+
+- **macOS**(launchd,把下面 plist 存成 `~/Library/LaunchAgents/com.zzz.fetchmargin.plist`
+  后 `launchctl load` 它;`StartCalendarInterval` 按 UTC 写,18:30 北京 = 10:30 UTC):
+
+  ```xml
+  <?xml version="1.0" encoding="UTF-8"?>
+  <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+  <plist version="1.0"><dict>
+    <key>Label</key><string>com.zzz.fetchmargin</string>
+    <key>ProgramArguments</key>
+    <array>
+      <string>/usr/bin/python3</string>
+      <string>/path/to/stock/scripts/fetch_margin_local.py</string>
+    </array>
+    <key>WorkingDirectory</key><string>/path/to/stock</string>
+    <key>StartCalendarInterval</key><dict>
+      <key>Weekday</key><integer>1</integer>
+      <key>Hour</key><integer>10</integer>
+      <key>Minute</key><integer>30</integer>
+    </dict>
+    <key>StandardOutPath</key><string>/tmp/fetch_margin.log</string>
+    <key>StandardErrorPath</key><string>/tmp/fetch_margin.log</string>
+  </dict></plist>
+  ```
+
+  注:launchd 的 `Weekday` 1=周一、5=周五;只写一组 `StartCalendarInterval` 不会自动覆盖
+  周二到周五,如需每个工作日触发,要写 5 组或改用 cron。
+
 ## 工作原理
 
 - 数据源:[akshare](https://github.com/akfamily/akshare) 免费公开接口(东方财富、沪深交易所等)

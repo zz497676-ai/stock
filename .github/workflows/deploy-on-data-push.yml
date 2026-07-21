@@ -1,0 +1,35 @@
+name: 数据更新后发布看板
+
+# 当 docs/ 下任意文件被推到 main 时(主要是本地脚本推送 leverage_data.json /
+# index.html / temperature_data.json),立即重新发布 gh-pages,不必等第二天 18:30
+# 的 daily.yml 定时任务。daily.yml 末尾也调 deploy-pages,两者都用 force_orphan
+# 做 force push,即便偶尔撞车也只是后发者覆盖,gh-pages 始终是 docs/ 的完整快照。
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: deploy-pages-on-data-push
+  cancel-in-progress: false
+
+jobs:
+  deploy-pages:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: 发布看板到 gh-pages 分支
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./docs
+          force_orphan: true
+          commit_message: "发布看板(数据更新触发)"

@@ -94,10 +94,12 @@ def write_page(trade_date: date, out_dir=None) -> None:
     (out / "index.html").write_text(render_page(trade_date), encoding="utf-8")
 
 
-def write_leverage_data(out_dir=None) -> None:
+def write_leverage_data(out_dir=None, detail_date=None) -> None:
     """把全量个股杠杆数据导出成 docs/leverage_data.json,供 risk.html 按代码查询单只持仓的杠杆水位。
 
     只含当日快照(不是历史时间序列),按代码建索引,体积小、查询是 O(1)。
+    ``detail_date`` 为两融明细的实际披露日(T+1),写进 JSON 的 ``date`` 字段,
+    供 risk.html 展示"当前杠杆数据日期";None 时该字段为 null,页面显示"—"。
     """
     out = (out_dir or (ROOT / "docs"))
     out.mkdir(parents=True, exist_ok=True)
@@ -115,6 +117,7 @@ def write_leverage_data(out_dir=None) -> None:
             }
     payload = {
         "alert_pct": float(load_config().get("leverage", {}).get("balance_ratio_alert_pct", 8.0)),
+        "date": detail_date.isoformat() if detail_date else None,
         "stocks": by_code,
     }
     (out / "leverage_data.json").write_text(

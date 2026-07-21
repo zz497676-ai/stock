@@ -151,6 +151,7 @@ tr.warn td { color: var(--warn); }
   <section id="tab-watch" hidden>
     <div class="card">
       <h2>持仓一览</h2>
+      <div id="levDate" class="note" style="margin:-4px 0 10px"></div>
       <div class="summary" id="watchSummary"></div>
       <div class="tblwrap">
         <table>
@@ -195,8 +196,18 @@ const fmt = (n, d=2) => Number(n).toLocaleString("zh-CN", { minimumFractionDigit
 const fmtPct = (n, d=2) => (n>0?"+":"") + Number(n).toFixed(d) + "%";
 
 // ---- 个股杠杆快照(只读,联网加载;离线/加载失败时静默降级为"—") ----
-let LEVERAGE = { alert_pct: 8, stocks: {} };
-fetch("leverage_data.json").then(r => r.json()).then(d => { LEVERAGE = d; renderWatch(); }).catch(() => {});
+let LEVERAGE = { alert_pct: 8, date: null, stocks: {} };
+const renderLevDate = () => {
+  const el = $("levDate");
+  if (!el) return;
+  const d = LEVERAGE.date;
+  el.textContent = d ? `当前杠杆数据日期:${d}(两融明细 T+1 披露,每交易日更新一次)`
+                     : "杠杆数据日期:—(尚未加载,离线打开本页或数据未发布时会显示—)";
+};
+renderLevDate();
+fetch("leverage_data.json").then(r => r.json()).then(d => {
+  LEVERAGE = d; renderLevDate(); renderWatch();
+}).catch(() => { renderLevDate(); });
 const extractCode = s => { const m = String(s || "").match(/\d{6}/); return m ? m[0] : null; };
 
 // ---- 顶部风险阈值(两个 tab 共用) ----
