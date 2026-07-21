@@ -1,0 +1,31 @@
+name: 数据推送后发布网站
+
+# 本地拉取脚本(scripts/fetch_margin_local.py)把两融数据推到 main 后,
+# 立即把 docs/ 重新发布到 gh-pages,不必等第二天的定时日报任务。
+# daily.yml 的机器人提交也会触发本 workflow,多发布一次是幂等的,无害。
+
+on:
+  push:
+    branches: [main]
+    paths: ["docs/**"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: deploy-pages
+  cancel-in-progress: true
+
+jobs:
+  deploy-pages:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: 发布看板到 gh-pages 分支
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./docs
+          force_orphan: true
+          commit_message: "发布看板"

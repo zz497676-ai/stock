@@ -175,7 +175,7 @@ tr.warn td { color: var(--warn); }
         浮亏达到或超过上方设定的风险阈值时标红,提示应考虑止损。<br>
         "代码/名称"里包含6位数字代码时,会自动匹配当日个股杠杆数据(融资买入占成交额% / 融资余额占流通市值%);
         余额占比超过预警阈值同样标红。该数据每交易日更新一次,来自本站"资金动向看板"的杠杆监测模块,
-        需联网加载,离线打开本页(file://)时这一列会显示"—"。</div>
+        需联网加载,离线打开本页(file://)时这一列会显示"—"。<span id="levDate"></span></div>
     </div>
   </section>
 
@@ -196,7 +196,11 @@ const fmtPct = (n, d=2) => (n>0?"+":"") + Number(n).toFixed(d) + "%";
 
 // ---- 个股杠杆快照(只读,联网加载;离线/加载失败时静默降级为"—") ----
 let LEVERAGE = { alert_pct: 8, stocks: {} };
-fetch("leverage_data.json").then(r => r.json()).then(d => { LEVERAGE = d; renderWatch(); }).catch(() => {});
+fetch("leverage_data.json").then(r => r.json()).then(d => {
+  LEVERAGE = d;
+  if (d.date) $("levDate").textContent = ` 当前杠杆数据日期:${d.date}(两融数据为T+1披露)。`;
+  renderWatch();
+}).catch(() => {});
 const extractCode = s => { const m = String(s || "").match(/\d{6}/); return m ? m[0] : null; };
 
 // ---- 顶部风险阈值(两个 tab 共用) ----

@@ -100,11 +100,57 @@ def _margin_detail_on(trade_date: date) -> tuple[pd.DataFrame | None, date | Non
     return None, None
 
 
+def build_stock_table(trade_date: date) -> tuple[pd.DataFrame | None, date | None, bool]:
+    """拉取两融明细+行情快照,产出全量个股杠杆表(collect 与本地拉取脚本共用)。
+
+    返回 (全量表, 两融数据日期, has_mcap);任一数据源缺失返回 (None, None, False)。
+    表按"融资买入占成交额%"降序,含"数据日期"列供下游判断新鲜度。
+    """
+    cfg = load_config().get("leverage", {})
+    min_mcap = float(cfg.get("min_float_mcap_yi", 20.0)) * 1e8
+    detail, detail_date = _margin_detail_on(trade_date)
+    spot, has_mcap = _spot_quote()
+    if detail is None or spot is None or spot.empty:
+        return None, None, False
+
+    spot = spot.copy()
+    spot["代码"] = spot["代码"].astype(str)
+    detail = detail.copy()
+    detail["代码"] = detail["代码"].astype(str)
+    merged = detail.merge(spot, on="代码", how="inner")
+    merged["成交额"] = pd.to_numeric(merged["成交额"], errors="coerce")
+    merged["流通市值"] = pd.to_numeric(merged["流通市值"], errors="coerce")
+    # 成交额过小的个股比例噪声大(分母太小),没有流通市值兜底过滤时额外设个下限
+    if has_mcap:
+        merged = merged[(merged["流通市值"] >= min_mcap) & (merged["成交额"] > 0)]
+    else:
+        merged = merged[merged["成交额"] >= 3e7]
+    if merged.empty:
+        return None, detail_date, has_mcap
+
+    merged["融资买入占成交额%"] = (
+        pd.to_numeric(merged["融资买入额"], errors="coerce") / merged["成交额"] * 100
+    )
+    merged["融资余额占流通市值%"] = (
+        pd.to_numeric(merged["融资余额"], errors="coerce") / merged["流通市值"] * 100
+        if has_mcap
+        else float("nan")
+    )
+    full = merged[
+        ["代码", "名称", "融资买入占成交额%", "融资余额占流通市值%", "涨跌幅", "振幅"]
+    ].copy()
+    for c in ("融资买入占成交额%", "融资余额占流通市值%"):
+        full[c] = full[c].round(2)
+    full = full.rename(columns={"涨跌幅": "当日涨跌幅%", "振幅": "当日振幅%"})
+    full = full.sort_values("融资买入占成交额%", ascending=False).reset_index(drop=True)
+    full["数据日期"] = detail_date.isoformat()
+    return full, detail_date, has_mcap
+
+
 def collect(trade_date: date) -> CollectorResult:
     r = CollectorResult(key="leverage", title="个股杠杆监测")
     cfg = load_config().get("leverage", {})
     top_n = int(cfg.get("top_n", 15))
-    min_mcap = float(cfg.get("min_float_mcap_yi", 20.0)) * 1e8
     alert_pct = float(cfg.get("balance_ratio_alert_pct", 8.0))
 
     # ---- 市场整体杠杆水位:两融资金参与度 = 两市融资买入额 / 两市股票成交额 ----
@@ -150,61 +196,33 @@ def collect(trade_date: date) -> CollectorResult:
     )
 
     # ---- 个股杠杆排行:融资买入占成交额、融资余额占流通市值 ----
-    detail, detail_date = _margin_detail_on(trade_date)
-    spot, has_mcap = _spot_quote()
-    # 成交额过小的个股比例噪声大(分母太小),没有流通市值兜底过滤时额外设个下限
-    min_turnover = 3e7
-    if detail is not None and spot is not None and not spot.empty:
-        spot = spot.copy()
-        spot["代码"] = spot["代码"].astype(str)
-        detail = detail.copy()
-        detail["代码"] = detail["代码"].astype(str)
-        merged = detail.merge(spot, on="代码", how="inner")
-        merged["成交额"] = pd.to_numeric(merged["成交额"], errors="coerce")
-        merged["流通市值"] = pd.to_numeric(merged["流通市值"], errors="coerce")
-        if has_mcap:
-            merged = merged[(merged["流通市值"] >= min_mcap) & (merged["成交额"] > 0)]
-        else:
-            merged = merged[merged["成交额"] >= min_turnover]
-        if not merged.empty:
-            merged["融资买入占成交额%"] = (
-                pd.to_numeric(merged["融资买入额"], errors="coerce") / merged["成交额"] * 100
-            )
-            merged["融资余额占流通市值%"] = (
-                pd.to_numeric(merged["融资余额"], errors="coerce") / merged["流通市值"] * 100
-                if has_mcap
-                else float("nan")
-            )
-            full = merged[
-                ["代码", "名称", "融资买入占成交额%", "融资余额占流通市值%", "涨跌幅", "振幅"]
-            ].copy()
-            for c in ("融资买入占成交额%", "融资余额占流通市值%"):
-                full[c] = full[c].round(2)
-            full = full.rename(columns={"涨跌幅": "当日涨跌幅%", "振幅": "当日振幅%"})
-            full = full.sort_values("融资买入占成交额%", ascending=False).reset_index(drop=True)
-            r.full_table = full  # 全量:供网页按个股代码查询用,不进日报
+    full, detail_date, has_mcap = build_stock_table(trade_date)
+    if full is not None:
+        r.full_table = full  # 全量:供网页按个股代码查询用,不进日报
 
-            show = full.head(top_n)
-            r.tables.append(
-                (f"当日杠杆最集中个股(前{len(show)}只,{detail_date.isoformat()}两融数据)", show)
+        show = full.drop(columns=["数据日期"]).head(top_n)
+        r.tables.append(
+            (f"当日杠杆最集中个股(前{len(show)}只,{detail_date.isoformat()}两融数据)", show)
+        )
+        if has_mcap:
+            alert_count = int((full["融资余额占流通市值%"] >= alert_pct).sum())
+            r.metrics["leverage_top_alert_count"] = alert_count
+            r.evidence.append(
+                f"当日纳入统计的{len(full)}只个股中,{alert_count}只融资余额占流通市值超过"
+                f"{alert_pct:.0f}%(阈值见 config.yaml);建议持有这类个股时使用更紧的止损比例"
+                "(参考仓位/止损计算器,该工具支持按代码查询个股杠杆水位)。"
             )
-            if has_mcap:
-                alert_count = int((full["融资余额占流通市值%"] >= alert_pct).sum())
-                r.metrics["leverage_top_alert_count"] = alert_count
-                r.evidence.append(
-                    f"当日纳入统计的{len(full)}只个股中,{alert_count}只融资余额占流通市值超过"
-                    f"{alert_pct:.0f}%(阈值见 config.yaml);建议持有这类个股时使用更紧的止损比例"
-                    "(参考仓位/止损计算器,该工具支持按代码查询个股杠杆水位)。"
-                )
-            else:
-                r.evidence.append(
-                    f"当日纳入统计的{len(full)}只个股按融资买入占成交额比重排行(见下表);"
-                    "行情快照取自备用数据源,不含流通市值,'融资余额占流通市值%'与市值过滤本次不可用。"
-                )
         else:
-            r.notes.append("个股两融明细与行情匹配后,没有满足过滤条件的样本。")
+            r.evidence.append(
+                f"当日纳入统计的{len(full)}只个股按融资买入占成交额比重排行(见下表);"
+                "行情快照取自备用数据源,不含流通市值,'融资余额占流通市值%'与市值过滤本次不可用。"
+            )
+    elif detail_date is not None:
+        r.notes.append("个股两融明细与行情匹配后,没有满足过滤条件的样本。")
     else:
-        missing = [n for n, v in (("个股两融明细", detail), ("实时行情快照", spot)) if v is None]
-        r.notes.append(f"{'、'.join(missing)}接口今日不可用,个股杠杆排行暂缺(不影响市场整体水位)。")
+        r.notes.append(
+            "个股两融明细或实时行情快照接口今日不可用,个股杠杆排行暂缺(不影响市场整体水位);"
+            "可用本地拉取脚本 scripts/fetch_margin_local.py 补数据。"
+        )
 
     return r

@@ -34,6 +34,29 @@
   超过预警阈值(默认 8%,见 `config.yaml`)的标红,提示对这类股票用更紧的止损比例
   (见下方仓位/止损计算器)。
 
+### 个股数据的本地拉取(重要)
+
+GitHub Actions 的出口网络连不上东财/新浪的行情接口,所以**个股级**的杠杆排行和查询
+在 CI 里拉不到数据(市场整体水位不受影响)。解决办法是在一台能正常访问这些数据源的
+机器上(你自己的电脑或国内服务器)每天跑一次本地拉取脚本,数据推回仓库后网站自动更新:
+
+```bash
+# 前提:装好 python3 和 git,克隆过本仓库且配置了推送权限
+pip install -r requirements.txt          # 首次运行装一次依赖
+python scripts/fetch_margin_local.py     # 拉取当日数据并自动推送(--no-push 只生成不推)
+```
+
+两融数据是 T+1 披露(交易日晚间公布),建议每个交易日 **20:30 之后**跑。定时配置:
+
+- **Windows**:任务计划程序 → 创建基本任务 → 每天 21:00 → 启动程序
+  `python`,参数 `scripts\fetch_margin_local.py`,起始于仓库目录。
+- **Mac / Linux**:`crontab -e` 加一行
+  `0 21 * * 1-5 cd /path/to/stock && python3 scripts/fetch_margin_local.py >> /tmp/margin_fetch.log 2>&1`
+
+脚本推送后,`.github/workflows/deploy-on-data-push.yml` 会自动把网站重新发布,
+几分钟内 [仓位/止损小工具](https://zz497676-ai.github.io/stock/risk.html) 里就能查到
+每只持仓的两融比例;数据日期会显示在页面上。哪天忘了跑,页面会继续用上一次的数据。
+
 ## 市场温度评分
 
 [打开温度评分](https://zz497676-ai.github.io/stock/temperature.html):每个交易日收盘后,把涨跌家数、

@@ -103,8 +103,11 @@ def write_leverage_data(out_dir=None) -> None:
     out.mkdir(parents=True, exist_ok=True)
     all_path = ROOT / load_config()["data_dir"] / "leverage_all.csv"
     by_code: dict = {}
+    data_date = None
     if all_path.exists():
         df = pd.read_csv(all_path, dtype={"代码": str})
+        if "数据日期" in df.columns and not df.empty and pd.notna(df.iloc[0]["数据日期"]):
+            data_date = str(df.iloc[0]["数据日期"])
         for _, row in df.iterrows():
             by_code[row["代码"]] = {
                 "name": row["名称"],
@@ -115,6 +118,7 @@ def write_leverage_data(out_dir=None) -> None:
             }
     payload = {
         "alert_pct": float(load_config().get("leverage", {}).get("balance_ratio_alert_pct", 8.0)),
+        "date": data_date,
         "stocks": by_code,
     }
     (out / "leverage_data.json").write_text(
