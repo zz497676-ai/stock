@@ -1,0 +1,575 @@
+From aa7768af848953e64d0e7fa3ac69f004a0cf7ff1 Mon Sep 17 00:00:00 2001
+From: sandbox-dev <sandbox-dev@local>
+Date: Tue, 21 Jul 2026 07:09:46 +0000
+Subject: [PATCH] =?UTF-8?q?=E4=B8=AA=E8=82=A1=E6=9D=A0=E6=9D=86=E6=95=B0?=
+ =?UTF-8?q?=E6=8D=AE:=E6=94=AF=E6=8C=81=E6=9C=AC=E5=9C=B0=E6=8B=89?=
+ =?UTF-8?q?=E5=8F=96=20+=20=E6=95=B0=E6=8D=AE=E6=9B=B4=E6=96=B0=E8=87=AA?=
+ =?UTF-8?q?=E5=8A=A8=E9=83=A8=E7=BD=B2=20+=20=E9=A1=B5=E9=9D=A2=E6=98=BE?=
+ =?UTF-8?q?=E7=A4=BA=E6=95=B0=E6=8D=AE=E6=97=A5=E6=9C=9F?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+- src/collectors/leverage.py:抽出 build_stock_table() 返回 StockTable
+  NamedTuple,collect() 改用它;CI 每日采集与本地脚本共用同一份逻辑,
+  evidence/notes 文本完全保留(main.py --mock 全流程验证无回归)
+- src/collectors/__init__.py:CollectorResult 加 detail_date 字段
+- src/webpage.py + src/main.py:write_leverage_data() 把 detail_date
+  写进 leverage_data.json 的 date 字段
+- scripts/fetch_margin_local.py:本地拉取脚本,生成三个产物文件并
+  git pull/commit/push;拉不到数据时退出码1不写文件;支持 --mock/--no-push
+- .github/workflows/deploy-on-data-push.yml:docs/** 变更触发 gh-pages 发布
+- docs/risk.html:持仓监控显示"当前杠杆数据日期"
+- README.md:加"个股数据的本地拉取"一节(安装/运行/三平台定时任务)
+---
+ .github/workflows/deploy-on-data-push.yml |  35 +++++
+ README.md                                 |  72 ++++++++++
+ docs/leverage_data.json                   |   2 +-
+ docs/risk.html                            |  15 +-
+ scripts/fetch_margin_local.py             | 115 +++++++++++++++
+ src/collectors/__init__.py                |   1 +
+ src/collectors/leverage.py                | 163 ++++++++++++++--------
+ src/main.py                               |   2 +-
+ src/webpage.py                            |   5 +-
+ 9 files changed, 350 insertions(+), 60 deletions(-)
+ create mode 100644 .github/workflows/deploy-on-data-push.yml
+ create mode 100644 scripts/fetch_margin_local.py
+
+diff --git a/.github/workflows/deploy-on-data-push.yml b/.github/workflows/deploy-on-data-push.yml
+new file mode 100644
+index 0000000..d5762f2
+--- /dev/null
++++ b/.github/workflows/deploy-on-data-push.yml
+@@ -0,0 +1,35 @@
++name: 数据更新后发布看板
++
++# 当 docs/ 下任意文件被推到 main 时(主要是本地脚本推送 leverage_data.json /
++# index.html / temperature_data.json),立即重新发布 gh-pages,不必等第二天 18:30
++# 的 daily.yml 定时任务。daily.yml 末尾也调 deploy-pages,两者都用 force_orphan
++# 做 force push,即便偶尔撞车也只是后发者覆盖,gh-pages 始终是 docs/ 的完整快照。
++
++on:
++  push:
++    branches: [main]
++    paths:
++      - "docs/**"
++
++permissions:
++  contents: write
++
++concurrency:
++  group: deploy-pages-on-data-push
++  cancel-in-progress: false
++
++jobs:
++  deploy-pages:
++    runs-on: ubuntu-latest
++    timeout-minutes: 10
++    steps:
++      - uses: actions/checkout@v4
++        with:
++          ref: main
++      - name: 发布看板到 gh-pages 分支
++        uses: peaceiris/actions-gh-pages@v4
++        with:
++          github_token: ${{ secrets.GITHUB_TOKEN }}
++          publish_dir: ./docs
++          force_orphan: true
++          commit_message: "发布看板(数据更新触发)"
+diff --git a/README.md b/README.md
+index 1911c67..d63d908 100644
+--- a/README.md
++++ b/README.md
+@@ -57,6 +57,78 @@
+ - **持仓监控**:手动记录持仓成本价、现价、数量,实时计算浮动盈亏,浮亏达到阈值自动标红提醒止损;
+   持仓代码命中当日个股杠杆数据时会自动显示该股的杠杆水位(联网加载每日快照,只读,不上传持仓)。
+ 
++## 个股数据的本地拉取
++
++GitHub Actions 跑在境外机房,访问不到东财/沪深交易所的行情与两融明细接口,所以 CI 产出的
++`docs/leverage_data.json` 长期是空的,`risk.html` 的"杠杆"列和"当前杠杆数据日期"会显示"—"。
++解决办法:在你自己电脑或国内服务器上,每个交易日收盘后跑一次
++[`scripts/fetch_margin_local.py`](scripts/fetch_margin_local.py),它和 CI 共用同一份
++`build_stock_table()` 逻辑(见 `src/collectors/leverage.py`),把当天的杠杆数据补上、推送,
++gh-pages 会自动重新发布(`.github/workflows/deploy-on-data-push.yml`)。
++
++**安装**(一次性):
++
++```bash
++git clone https://github.com/zz497676-ai/stock.git
++cd stock
++pip install -r requirements.txt   # akshare + pandas + PyYAML
++```
++
++**手动跑一次**:
++
++```bash
++python scripts/fetch_margin_local.py                # 拉今天的数据,提交推送
++python scripts/fetch_margin_local.py --date 20260720 # 补跑指定日
++python scripts/fetch_margin_local.py --mock          # 离线假数据自测(不提交)
++python scripts/fetch_margin_local.py --no-push       # 只生成文件,不 git 提交
++```
++
++拉不到数据时脚本会明确报错、不写文件、不提交(退出码 1),不会留下半成品覆盖旧数据。
++
++**定时任务**(三选一,挑你机器对应的那条):
++
++- **Linux / macOS**(cron,每个交易日 18:30 北京时间 = 10:30 UTC 跑):
++
++  ```cron
++  30 10 * * 1-5 cd /path/to/stock && /usr/bin/python3 scripts/fetch_margin_local.py >> /tmp/fetch_margin.log 2>&1
++  ```
++
++- **Windows**(任务计划程序,PowerShell 创建一个每个工作日 18:30 触发的任务):
++
++  ```powershell
++  $a = New-ScheduledTaskAction -Execute "python.exe" `
++      -Argument "scripts\fetch_margin_local.py" -WorkingDirectory "C:\path\to\stock"
++  $t = New-ScheduledTaskTrigger -Weekly -DaysOfWeek Monday,Tuesday,Wednesday,Thursday,Friday -At 18:30
++  Register-ScheduledTask -TaskName "FetchMargin" -Action $a -Trigger $t
++  ```
++
++- **macOS**(launchd,把下面 plist 存成 `~/Library/LaunchAgents/com.zzz.fetchmargin.plist`
++  后 `launchctl load` 它;`StartCalendarInterval` 按 UTC 写,18:30 北京 = 10:30 UTC):
++
++  ```xml
++  <?xml version="1.0" encoding="UTF-8"?>
++  <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
++  <plist version="1.0"><dict>
++    <key>Label</key><string>com.zzz.fetchmargin</string>
++    <key>ProgramArguments</key>
++    <array>
++      <string>/usr/bin/python3</string>
++      <string>/path/to/stock/scripts/fetch_margin_local.py</string>
++    </array>
++    <key>WorkingDirectory</key><string>/path/to/stock</string>
++    <key>StartCalendarInterval</key><dict>
++      <key>Weekday</key><integer>1</integer>
++      <key>Hour</key><integer>10</integer>
++      <key>Minute</key><integer>30</integer>
++    </dict>
++    <key>StandardOutPath</key><string>/tmp/fetch_margin.log</string>
++    <key>StandardErrorPath</key><string>/tmp/fetch_margin.log</string>
++  </dict></plist>
++  ```
++
++  注:launchd 的 `Weekday` 1=周一、5=周五;只写一组 `StartCalendarInterval` 不会自动覆盖
++  周二到周五,如需每个工作日触发,要写 5 组或改用 cron。
++
+ ## 工作原理
+ 
+ - 数据源:[akshare](https://github.com/akfamily/akshare) 免费公开接口(东方财富、沪深交易所等)
+diff --git a/docs/leverage_data.json b/docs/leverage_data.json
+index 5d45895..36dedee 100644
+--- a/docs/leverage_data.json
++++ b/docs/leverage_data.json
+@@ -1 +1 @@
+-{"alert_pct": 8.0, "stocks": {}}
+\ No newline at end of file
++{"alert_pct": 8.0, "date": null, "stocks": {}}
+\ No newline at end of file
+diff --git a/docs/risk.html b/docs/risk.html
+index 04a5e74..1fdcfb2 100644
+--- a/docs/risk.html
++++ b/docs/risk.html
+@@ -151,6 +151,7 @@ tr.warn td { color: var(--warn); }
+   <section id="tab-watch" hidden>
+     <div class="card">
+       <h2>持仓一览</h2>
++      <div id="levDate" class="note" style="margin:-4px 0 10px"></div>
+       <div class="summary" id="watchSummary"></div>
+       <div class="tblwrap">
+         <table>
+@@ -195,8 +196,18 @@ const fmt = (n, d=2) => Number(n).toLocaleString("zh-CN", { minimumFractionDigit
+ const fmtPct = (n, d=2) => (n>0?"+":"") + Number(n).toFixed(d) + "%";
+ 
+ // ---- 个股杠杆快照(只读,联网加载;离线/加载失败时静默降级为"—") ----
+-let LEVERAGE = { alert_pct: 8, stocks: {} };
+-fetch("leverage_data.json").then(r => r.json()).then(d => { LEVERAGE = d; renderWatch(); }).catch(() => {});
++let LEVERAGE = { alert_pct: 8, date: null, stocks: {} };
++const renderLevDate = () => {
++  const el = $("levDate");
++  if (!el) return;
++  const d = LEVERAGE.date;
++  el.textContent = d ? `当前杠杆数据日期:${d}(两融明细 T+1 披露,每交易日更新一次)`
++                     : "杠杆数据日期:—(尚未加载,离线打开本页或数据未发布时会显示—)";
++};
++renderLevDate();
++fetch("leverage_data.json").then(r => r.json()).then(d => {
++  LEVERAGE = d; renderLevDate(); renderWatch();
++}).catch(() => { renderLevDate(); });
+ const extractCode = s => { const m = String(s || "").match(/\d{6}/); return m ? m[0] : null; };
+ 
+ // ---- 顶部风险阈值(两个 tab 共用) ----
+diff --git a/scripts/fetch_margin_local.py b/scripts/fetch_margin_local.py
+new file mode 100644
+index 0000000..53e5b3b
+--- /dev/null
++++ b/scripts/fetch_margin_local.py
+@@ -0,0 +1,115 @@
++"""本地拉取个股杠杆(两融)数据 → 生成 data/leverage_all.csv、data/leverage_top.csv、
++docs/leverage_data.json → git pull/commit/push。
++
++为什么需要这个脚本:GitHub Actions 跑的每日采集(src/main.py)因为 CI 出口 IP
++访问不到东财/沪深交易所的行情与两融明细接口,产出的 docs/leverage_data.json 长期是
++空的;risk.html 的"杠杆"列也就一直显示"—"。在你自己电脑或国内服务器上跑这个脚本,
++它和 CI 共用同一份 build_stock_table() 逻辑,把当天的杠杆数据补上、推送,gh-pages
++会自动重新发布(.github/workflows/deploy-on-data-push.yml)。
++
++用法:
++    python scripts/fetch_margin_local.py                # 拉今天的数据,提交推送
++    python scripts/fetch_margin_local.py --date 20260720
++    python scripts/fetch_margin_local.py --mock         # 离线假数据自测(不提交)
++    python scripts/fetch_margin_local.py --no-push      # 只生成文件,不 git 提交
++
++失败语义:两融明细或行情快照任一拿不到时,不写任何文件、不提交,以退出码 1 报错。
++"""
++
++from __future__ import annotations
++
++import argparse
++import subprocess
++import sys
++from datetime import date, datetime
++from pathlib import Path
++
++# 脚本不在 src/ 内,也不要求装包:把 src/ 加到 sys.path 即可直接 import
++ROOT = Path(__file__).resolve().parent.parent
++sys.path.insert(0, str(ROOT / "src"))
++
++import utils  # noqa: E402
++from collectors.leverage import build_stock_table  # noqa: E402
++from utils import load_config, today_cst  # noqa: E402
++from webpage import write_leverage_data  # noqa: E402
++
++
++def run(trade_date: date, mock: bool, no_push: bool) -> int:
++    if mock:
++        from fixtures import build_mock_data
++
++        utils.MOCK_DATA = build_mock_data(trade_date)
++        print(f"[mock] 使用假数据运行,日期 {trade_date}")
++
++    print(f"[fetch] 拉取 {trade_date} 的个股杠杆数据 ...")
++    st = build_stock_table(trade_date)
++
++    # 失败:不写任何文件,明确报错退出(避免留下半成品 / 旧数据被覆盖)
++    if st.full is None or st.full.empty:
++        reason = st.note or "未知原因(两融明细或行情快照未取到)"
++        print(f"[error] 拉不到数据,不写文件不提交:{reason}", file=sys.stderr)
++        return 1
++
++    cfg = load_config()
++    data_dir = ROOT / cfg["data_dir"]
++    data_dir.mkdir(parents=True, exist_ok=True)
++    top_n = int(cfg.get("leverage", {}).get("top_n", 15))
++
++    full_path = data_dir / "leverage_all.csv"
++    top_path = data_dir / "leverage_top.csv"
++    st.full.to_csv(full_path, index=False)
++    st.full.head(top_n).to_csv(top_path, index=False)
++    print(f"[write] {full_path.relative_to(ROOT)}({len(st.full)} 只)")
++    print(f"[write] {top_path.relative_to(ROOT)}(前 {top_n} 只)")
++
++    write_leverage_data(detail_date=st.detail_date)
++    print(f"[write] docs/leverage_data.json(数据日期={st.detail_date})")
++
++    if mock or no_push:
++        print("[skip] mock/no-push 模式,不执行 git 提交。")
++        return 0
++
++    return git_commit_push(trade_date)
++
++
++def git_commit_push(trade_date: date) -> int:
++    """提交三个产物文件并推送。先 pull --ff-only 避免覆盖远端新提交。"""
++    print("[git] 拉取最新 main ...")
++    try:
++        subprocess.run(
++            ["git", "pull", "--ff-only"], check=True, cwd=ROOT,
++            capture_output=True, text=True,
++        )
++    except subprocess.CalledProcessError as e:
++        print(f"[error] git pull 失败,请手动处理后再跑:\n{e.stdout}{e.stderr}", file=sys.stderr)
++        return 1
++
++    subprocess.run(
++        ["git", "add", "data/leverage_all.csv", "data/leverage_top.csv", "docs/leverage_data.json"],
++        check=True, cwd=ROOT,
++    )
++    diff = subprocess.run(["git", "diff", "--cached", "--quiet"], cwd=ROOT)
++    if diff.returncode == 0:
++        print("[git] 无变更,跳过提交。")
++        return 0
++
++    msg = f"个股杠杆数据: {trade_date.isoformat()}"
++    subprocess.run(["git", "commit", "-m", msg], check=True, cwd=ROOT)
++    subprocess.run(["git", "push"], check=True, cwd=ROOT)
++    print(f"[git] 已提交并推送:{msg}")
++    return 0
++
++
++def main() -> int:
++    p = argparse.ArgumentParser(description="本地拉取个股杠杆(两融)数据并推送")
++    p.add_argument("--date", help="指定日期 YYYYMMDD,默认北京时间今天")
++    p.add_argument("--mock", action="store_true", help="用假数据离线自测(不提交)")
++    p.add_argument("--no-push", action="store_true", help="只生成文件,不 git 提交推送")
++    args = p.parse_args()
++
++    d = datetime.strptime(args.date, "%Y%m%d").date() if args.date else today_cst()
++    return run(d, mock=args.mock, no_push=args.no_push)
++
++
++if __name__ == "__main__":
++    sys.exit(main())
+diff --git a/src/collectors/__init__.py b/src/collectors/__init__.py
+index 5e86359..d2f7a65 100644
+--- a/src/collectors/__init__.py
++++ b/src/collectors/__init__.py
+@@ -18,3 +18,4 @@ class CollectorResult:
+     notes: list = field(default_factory=list)        # 数据口径/失败说明
+     history: pd.DataFrame | None = None              # main 写入历史后回填,供 analyzer 用
+     full_table: pd.DataFrame | None = None           # 可选:完整明细(不进日报,供网页按需查询单只个股用)
++    detail_date: date | None = None                  # full_table 对应的数据披露日(如两融 T+1),供网页展示
+diff --git a/src/collectors/leverage.py b/src/collectors/leverage.py
+index 1e62bba..f8136a9 100644
+--- a/src/collectors/leverage.py
++++ b/src/collectors/leverage.py
+@@ -11,6 +11,7 @@
+ from __future__ import annotations
+ 
+ from datetime import date, timedelta
++from typing import NamedTuple
+ 
+ import pandas as pd
+ 
+@@ -19,6 +20,17 @@ from collectors.market_common import sse_stock_turnover, szse_stock_turnover
+ from utils import cached_fetch, load_config, load_history, rolling_baseline
+ 
+ 
++class StockTable(NamedTuple):
++    """build_stock_table() 的返回:个股杠杆排行的全量明细与元信息。"""
++
++    full: pd.DataFrame | None       # 全量明细(按融资买入占成交额%降序),无数据时为 None
++    detail_date: date | None        # 两融明细实际披露日(T+1,可能比 trade_date 早一两天)
++    has_mcap: bool                  # 行情快照是否含流通市值(决定余额占比是否可算)
++    alert_count: int                # 融资余额占流通市值超阈值的个股数(无流通市值时为 0)
++    filtered_count: int             # 纳入统计的个股数(无数据时为 0)
++    note: str | None                # 失败时写进 CollectorResult.notes 的文本,成功时为 None
++
++
+ def _sse_margin_buy_on(trade_date: date) -> float | None:
+     start = (trade_date - timedelta(days=70)).strftime("%Y%m%d")
+     df = cached_fetch("stock_margin_sse", start_date=start, end_date=trade_date.strftime("%Y%m%d"))
+@@ -100,11 +112,86 @@ def _margin_detail_on(trade_date: date) -> tuple[pd.DataFrame | None, date | Non
+     return None, None
+ 
+ 
++def build_stock_table(trade_date: date) -> StockTable:
++    """拉两融明细 + 行情快照,算出"融资买入占成交额% / 融资余额占流通市值%",返回全量明细。
++
++    CI 每日采集(``leverage.collect``)和本地拉取脚本(``scripts/fetch_margin_local.py``)
++    共用此函数,保证两条路径算出的数据口径完全一致。失败时 ``full`` 为 None,
++    ``note`` 给出可写进报告/日志的原因。
++    """
++    cfg = load_config().get("leverage", {})
++    min_mcap = float(cfg.get("min_float_mcap_yi", 20.0)) * 1e8
++    alert_pct = float(cfg.get("balance_ratio_alert_pct", 8.0))
++    # 成交额过小的个股比例噪声大(分母太小),没有流通市值兜底过滤时额外设个下限
++    min_turnover = 3e7
++
++    detail, detail_date = _margin_detail_on(trade_date)
++    spot, has_mcap = _spot_quote()
++
++    if detail is None or spot is None or spot.empty:
++        missing = [n for n, v in (("个股两融明细", detail), ("实时行情快照", spot)) if v is None]
++        return StockTable(
++            full=None,
++            detail_date=detail_date,
++            has_mcap=has_mcap,
++            alert_count=0,
++            filtered_count=0,
++            note=f"{'、'.join(missing)}接口今日不可用,个股杠杆排行暂缺(不影响市场整体水位)。",
++        )
++
++    spot = spot.copy()
++    spot["代码"] = spot["代码"].astype(str)
++    detail = detail.copy()
++    detail["代码"] = detail["代码"].astype(str)
++    merged = detail.merge(spot, on="代码", how="inner")
++    merged["成交额"] = pd.to_numeric(merged["成交额"], errors="coerce")
++    merged["流通市值"] = pd.to_numeric(merged["流通市值"], errors="coerce")
++    if has_mcap:
++        merged = merged[(merged["流通市值"] >= min_mcap) & (merged["成交额"] > 0)]
++    else:
++        merged = merged[merged["成交额"] >= min_turnover]
++
++    if merged.empty:
++        return StockTable(
++            full=None,
++            detail_date=detail_date,
++            has_mcap=has_mcap,
++            alert_count=0,
++            filtered_count=0,
++            note="个股两融明细与行情匹配后,没有满足过滤条件的样本。",
++        )
++
++    merged["融资买入占成交额%"] = (
++        pd.to_numeric(merged["融资买入额"], errors="coerce") / merged["成交额"] * 100
++    )
++    merged["融资余额占流通市值%"] = (
++        pd.to_numeric(merged["融资余额"], errors="coerce") / merged["流通市值"] * 100
++        if has_mcap
++        else float("nan")
++    )
++    full = merged[
++        ["代码", "名称", "融资买入占成交额%", "融资余额占流通市值%", "涨跌幅", "振幅"]
++    ].copy()
++    for c in ("融资买入占成交额%", "融资余额占流通市值%"):
++        full[c] = full[c].round(2)
++    full = full.rename(columns={"涨跌幅": "当日涨跌幅%", "振幅": "当日振幅%"})
++    full = full.sort_values("融资买入占成交额%", ascending=False).reset_index(drop=True)
++
++    alert_count = int((full["融资余额占流通市值%"] >= alert_pct).sum()) if has_mcap else 0
++    return StockTable(
++        full=full,
++        detail_date=detail_date,
++        has_mcap=has_mcap,
++        alert_count=alert_count,
++        filtered_count=len(full),
++        note=None,
++    )
++
++
+ def collect(trade_date: date) -> CollectorResult:
+     r = CollectorResult(key="leverage", title="个股杠杆监测")
+     cfg = load_config().get("leverage", {})
+     top_n = int(cfg.get("top_n", 15))
+-    min_mcap = float(cfg.get("min_float_mcap_yi", 20.0)) * 1e8
+     alert_pct = float(cfg.get("balance_ratio_alert_pct", 8.0))
+ 
+     # ---- 市场整体杠杆水位:两融资金参与度 = 两市融资买入额 / 两市股票成交额 ----
+@@ -150,61 +237,27 @@ def collect(trade_date: date) -> CollectorResult:
+     )
+ 
+     # ---- 个股杠杆排行:融资买入占成交额、融资余额占流通市值 ----
+-    detail, detail_date = _margin_detail_on(trade_date)
+-    spot, has_mcap = _spot_quote()
+-    # 成交额过小的个股比例噪声大(分母太小),没有流通市值兜底过滤时额外设个下限
+-    min_turnover = 3e7
+-    if detail is not None and spot is not None and not spot.empty:
+-        spot = spot.copy()
+-        spot["代码"] = spot["代码"].astype(str)
+-        detail = detail.copy()
+-        detail["代码"] = detail["代码"].astype(str)
+-        merged = detail.merge(spot, on="代码", how="inner")
+-        merged["成交额"] = pd.to_numeric(merged["成交额"], errors="coerce")
+-        merged["流通市值"] = pd.to_numeric(merged["流通市值"], errors="coerce")
+-        if has_mcap:
+-            merged = merged[(merged["流通市值"] >= min_mcap) & (merged["成交额"] > 0)]
+-        else:
+-            merged = merged[merged["成交额"] >= min_turnover]
+-        if not merged.empty:
+-            merged["融资买入占成交额%"] = (
+-                pd.to_numeric(merged["融资买入额"], errors="coerce") / merged["成交额"] * 100
+-            )
+-            merged["融资余额占流通市值%"] = (
+-                pd.to_numeric(merged["融资余额"], errors="coerce") / merged["流通市值"] * 100
+-                if has_mcap
+-                else float("nan")
+-            )
+-            full = merged[
+-                ["代码", "名称", "融资买入占成交额%", "融资余额占流通市值%", "涨跌幅", "振幅"]
+-            ].copy()
+-            for c in ("融资买入占成交额%", "融资余额占流通市值%"):
+-                full[c] = full[c].round(2)
+-            full = full.rename(columns={"涨跌幅": "当日涨跌幅%", "振幅": "当日振幅%"})
+-            full = full.sort_values("融资买入占成交额%", ascending=False).reset_index(drop=True)
+-            r.full_table = full  # 全量:供网页按个股代码查询用,不进日报
+-
+-            show = full.head(top_n)
+-            r.tables.append(
+-                (f"当日杠杆最集中个股(前{len(show)}只,{detail_date.isoformat()}两融数据)", show)
++    st = build_stock_table(trade_date)
++    r.detail_date = st.detail_date
++    if st.full is not None:
++        r.full_table = st.full  # 全量:供网页按个股代码查询用,不进日报
++        show = st.full.head(top_n)
++        r.tables.append(
++            (f"当日杠杆最集中个股(前{len(show)}只,{st.detail_date.isoformat()}两融数据)", show)
++        )
++        if st.has_mcap:
++            r.metrics["leverage_top_alert_count"] = st.alert_count
++            r.evidence.append(
++                f"当日纳入统计的{st.filtered_count}只个股中,{st.alert_count}只融资余额占流通市值超过"
++                f"{alert_pct:.0f}%(阈值见 config.yaml);建议持有这类个股时使用更紧的止损比例"
++                "(参考仓位/止损计算器,该工具支持按代码查询个股杠杆水位)。"
+             )
+-            if has_mcap:
+-                alert_count = int((full["融资余额占流通市值%"] >= alert_pct).sum())
+-                r.metrics["leverage_top_alert_count"] = alert_count
+-                r.evidence.append(
+-                    f"当日纳入统计的{len(full)}只个股中,{alert_count}只融资余额占流通市值超过"
+-                    f"{alert_pct:.0f}%(阈值见 config.yaml);建议持有这类个股时使用更紧的止损比例"
+-                    "(参考仓位/止损计算器,该工具支持按代码查询个股杠杆水位)。"
+-                )
+-            else:
+-                r.evidence.append(
+-                    f"当日纳入统计的{len(full)}只个股按融资买入占成交额比重排行(见下表);"
+-                    "行情快照取自备用数据源,不含流通市值,'融资余额占流通市值%'与市值过滤本次不可用。"
+-                )
+         else:
+-            r.notes.append("个股两融明细与行情匹配后,没有满足过滤条件的样本。")
+-    else:
+-        missing = [n for n, v in (("个股两融明细", detail), ("实时行情快照", spot)) if v is None]
+-        r.notes.append(f"{'、'.join(missing)}接口今日不可用,个股杠杆排行暂缺(不影响市场整体水位)。")
++            r.evidence.append(
++                f"当日纳入统计的{st.filtered_count}只个股按融资买入占成交额比重排行(见下表);"
++                "行情快照取自备用数据源,不含流通市值,'融资余额占流通市值%'与市值过滤本次不可用。"
++            )
++    elif st.note:
++        r.notes.append(st.note)
+ 
+     return r
+diff --git a/src/main.py b/src/main.py
+index 877415d..6726e06 100644
+--- a/src/main.py
++++ b/src/main.py
+@@ -128,7 +128,7 @@ def run(trade_date: date, mock: bool = False, skip_calendar: bool = False) -> in
+             from webpage import write_leverage_data, write_page, write_temperature_data
+ 
+             write_page(trade_date)
+-            write_leverage_data()
++            write_leverage_data(detail_date=lev.detail_date)
+             write_temperature_data()
+             print("[web] docs/index.html、docs/leverage_data.json、docs/temperature_data.json 已更新")
+         except Exception as e:  # noqa: BLE001 网页失败不影响日报
+diff --git a/src/webpage.py b/src/webpage.py
+index 8343e37..e14d21f 100644
+--- a/src/webpage.py
++++ b/src/webpage.py
+@@ -94,10 +94,12 @@ def write_page(trade_date: date, out_dir=None) -> None:
+     (out / "index.html").write_text(render_page(trade_date), encoding="utf-8")
+ 
+ 
+-def write_leverage_data(out_dir=None) -> None:
++def write_leverage_data(out_dir=None, detail_date=None) -> None:
+     """把全量个股杠杆数据导出成 docs/leverage_data.json,供 risk.html 按代码查询单只持仓的杠杆水位。
+ 
+     只含当日快照(不是历史时间序列),按代码建索引,体积小、查询是 O(1)。
++    ``detail_date`` 为两融明细的实际披露日(T+1),写进 JSON 的 ``date`` 字段,
++    供 risk.html 展示"当前杠杆数据日期";None 时该字段为 null,页面显示"—"。
+     """
+     out = (out_dir or (ROOT / "docs"))
+     out.mkdir(parents=True, exist_ok=True)
+@@ -115,6 +117,7 @@ def write_leverage_data(out_dir=None) -> None:
+             }
+     payload = {
+         "alert_pct": float(load_config().get("leverage", {}).get("balance_ratio_alert_pct", 8.0)),
++        "date": detail_date.isoformat() if detail_date else None,
+         "stocks": by_code,
+     }
+     (out / "leverage_data.json").write_text(
+-- 
+2.43.0
+
