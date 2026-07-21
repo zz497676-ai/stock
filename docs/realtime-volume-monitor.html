@@ -140,7 +140,7 @@
   <div class="legendbar">
     <span><i style="background:var(--blue)"></i>Diff 放量</span>
     <span><i style="background:rgba(62,207,142,.75)"></i>Diff 缩量</span>
-    <span><i class="ln" style="border-color:var(--yellow)"></i>Avg5 5日均值累计</span>
+    <span><i class="ln" style="border-color:var(--yellow)"></i>Avg5 分时均值累计（详见页脚天数）</span>
     <span><i class="ln" style="border-color:var(--green)"></i>Today 今日累计</span>
     <span><i class="ln" style="border-color:var(--purple)"></i>上证指数 涨跌幅</span>
   </div>
@@ -248,28 +248,42 @@ function jsonp(url, timeoutMs){
   });
 }
 
-function buildUrl(secid){
+function buildUrl(secid, ndays){
   return 'https://push2his.eastmoney.com/api/qt/stock/trends2/get?secid='+secid+
     '&fields1=f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13'+
-    '&fields2=f51,f52,f53,f54,f55,f56,f57,f58&iscr=0&ndays='+NDAYS;
+    '&fields2=f51,f52,f53,f54,f55,f56,f57,f58&iscr=0&ndays='+ndays;
 }
 
+// 接口对 ndays 支持的上限不明确（无官方文档），从期望的天数往下试，
+// 直到已知能用的 2 天为止，三个指数必须用同一个 ndays，保证三市求和口径一致。
+const NDAYS_CANDIDATES = [...new Set([NDAYS,5,4,3,2])].filter(n=>n>=2);
+
 async function fetchAll(){
-  const maps = [];
-  let shTrends = null, shPreClose = NaN;
-  for(let k=0;k<INDICES.length;k++){
-    const idx = INDICES[k];
-    const d = await jsonp(buildUrl(idx.secid), 20000);
-    const trends = (d&&d.data&&d.data.trends)||[];
-    if(!trends.length) throw new Error(idx.name+'无数据');
-    maps.push(parseTrends(trends));
-    if(k===0){
-      shTrends = trends;
-      const dd = d.data||{};
-      shPreClose = Number(dd.preClose!=null?dd.preClose:dd.prePrice);
+  let lastErr=null;
+  for(const nd of NDAYS_CANDIDATES){
+    try{
+      const maps = [];
+      let shTrends = null, shPreClose = NaN;
+      for(let k=0;k<INDICES.length;k++){
+        const idx = INDICES[k];
+        const d = await jsonp(buildUrl(idx.secid, nd), 12000);
+        const trends = (d&&d.data&&d.data.trends)||[];
+        if(!trends.length) throw new Error(idx.name+'（ndays='+nd+'）无数据');
+        maps.push(parseTrends(trends));
+        if(k===0){
+          shTrends = trends;
+          const dd = d.data||{};
+          shPreClose = Number(dd.preClose!=null?dd.preClose:dd.prePrice);
+        }
+      }
+      if(nd!==NDAYS) console.warn('ndays='+NDAYS+' 不可用，已自动降级为 ndays='+nd);
+      return {maps, shTrends, shPreClose, ndaysUsed:nd}; // maps: [shMap, szMap, bjMap]
+    }catch(e){
+      lastErr=e;
+      console.warn('ndays='+nd+' 请求失败:', e.message);
     }
   }
-  return {maps, shTrends, shPreClose}; // maps: [shMap, szMap, bjMap]
+  throw lastErr || new Error('分时数据获取失败');
 }
 
 /* 解析单指数分时成交额 → { 'YYYY-MM-DD HH:MM': amount } */
@@ -607,7 +621,7 @@ async function tick(isFirst){
       el.innerHTML=(df>=0?'+':'')+df.toFixed(1)+' 亿'+
         (isNaN(pct)?'':'<span class="pct">('+(pct>=0?'+':'')+pct.toFixed(1)+'%)</span>');
       el.className='v '+(df>=0?'up':'down');
-      $('kpiSub').textContent='比5日均值 '+(df>=0?'放量':'缩量');
+      $('kpiSub').textContent='比'+s.baseDates.length+'日均值 '+(df>=0?'放量':'缩量');
       // 按5日均值同时点进度外推全天成交额
       const yValid=s.y.filter(v=>!isNaN(v));
       const yFinal=yValid.length?yValid[yValid.length-1]:NaN;
@@ -639,7 +653,7 @@ async function tick(isFirst){
       // ---- 记录并渲染近5日量能（用各基准日的真实全天总量回填历史） ----
       saveHist(s, s.t[li], est);
     }
-    $('dy').textContent=s.baseDates.length ? (s.baseDates[0]+' ~ '+s.baseDates[s.baseDates.length-1]) : '--';
+    $('dy').textContent=s.baseDates.length ? (s.baseDates.length+'日: '+s.baseDates[0]+' ~ '+s.baseDates[s.baseDates.length-1]) : '--';
     $('dt').textContent=s.tDate;
     const lastValid=s.t.filter(v=>!isNaN(v)); if(lastValid.length) $('ftotal').textContent=lastValid[lastValid.length-1].toFixed(1)+' 亿';
     $('mkLabel').textContent='沪深京三市';
