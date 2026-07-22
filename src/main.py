@@ -16,6 +16,7 @@ import pandas as pd
 
 import utils
 from analyzer import analyze
+from collectors import leverage
 from report import render, write_report
 from utils import append_events, cached_fetch, is_trading_day, load_config, today_cst, upsert_history
 
@@ -121,6 +122,39 @@ def run(trade_date: date, mock: bool = False, skip_calendar: bool = False) -> in
         except Exception as e:  # noqa: BLE001 个股事件失败不影响日报主流程
             print(f"[events] 个股事件持久化失败: {type(e).__name__}: {e}")
 
+    # 个股杠杆监测:风险敞口而非资金流向,不参与七类资金打分,单独调度
+    print("[collect] leverage ...")
+    try:
+        lev = leverage.collect(trade_date)
+    except Exception as e:  # noqa: BLE001 单个模块崩溃不拖垮全局
+        from collectors import CollectorResult
+
+        lev = CollectorResult(key="leverage", title="个股杠杆监测")
+        lev.notes.append(f"采集模块异常:{type(e).__name__}: {e}")
+        utils.FETCH_ERRORS.append(f"collector leverage: {type(e).__name__}: {str(e)[:120]}")
+    if lev.metrics and not mock:
+        upsert_history(lev.key, trade_date, lev.metrics)
+    if not mock and (lev.tables or lev.full_table is not None):
+        data_dir = utils.ROOT / load_config()["data_dir"]
+        if lev.tables:
+            lev.tables[0][1].to_csv(data_dir / "leverage_top.csv", index=False)
+        if lev.full_table is not None:
+            lev.full_table.to_csv(data_dir / "leverage_all.csv", index=False)
+
+    # 市场温度评分:客观统计合成,不参与七类资金打分,单独调度(spec: specs/market-temperature.md)
+    print("[collect] temperature ...")
+    try:
+        from collectors import temperature as temperature_collector
+
+        temp_result = temperature_collector.collect(trade_date)
+    except Exception as e:  # noqa: BLE001 单个模块崩溃不拖垮全局
+        temp_result = None
+        utils.FETCH_ERRORS.append(f"collector temperature: {type(e).__name__}: {str(e)[:120]}")
+    if temp_result is not None and not mock:
+        upsert_history("temperature", trade_date, temp_result["raw"])
+        if temp_result["missing"]:
+            print(f"[temperature] {len(temp_result['missing'])} 项指标当日缺失: {', '.join(temp_result['missing'])}")
+
     # 生成图表(mock 写入独立目录,不污染正式产物)
     from charts import render_all
 
@@ -134,14 +168,16 @@ def run(trade_date: date, mock: bool = False, skip_calendar: bool = False) -> in
     # 交互式网页看板(GitHub Pages)
     if not mock:
         try:
-            from webpage import write_page
+            from webpage import write_leverage_data, write_page, write_temperature_data
 
             write_page(trade_date)
-            print("[web] docs/index.html 已更新")
+            write_leverage_data()
+            write_temperature_data()
+            print("[web] docs/index.html、docs/leverage_data.json、docs/temperature_data.json 已更新")
         except Exception as e:  # noqa: BLE001 网页失败不影响日报
             print(f"[web] 网页生成失败: {type(e).__name__}: {e}")
 
-    content = render(trade_date, results)
+    content = render(trade_date, results, lev)
     if mock:
         out = utils.ROOT / "reports" / f"mock-{trade_date.isoformat()}.md"
         out.parent.mkdir(exist_ok=True)

@@ -231,6 +231,7 @@ TREND_SPECS = [
     ("quant", "csi2000_share_pct", "小微盘成交占比(量化活跃度代理)", 1.0, "%", "micro_share.svg"),
     ("hot_money", "famous_seat_net_buy", "知名游资席位净买入", 1e8, "亿元", "hot_money.svg"),
     ("mutual_fund", "etf_shares_chg", "全市场ETF份额日变动(公募申赎代理)", 1e8, "亿份", "etf_flow.svg"),
+    ("leverage", "leverage_pct", "两融资金参与度(杠杆水位代理)", 1.0, "%", "leverage.svg"),
 ]
 
 

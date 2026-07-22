@@ -1,0 +1,71 @@
+name: 温度评分历史数据回填
+
+# 一次性/按需工具(spec: specs/market-temperature.md §4),只手动触发,不进日常调度。
+# 只回填 data/temperature.csv 里缺失的历史交易日,已有数据的日期自动跳过(幂等,可重复跑)。
+# "涨跌家数占比"(乐咕快照)没有历史查询能力,回填不了,会随每天的正常流程逐日补齐。
+
+on:
+  workflow_dispatch:
+    inputs:
+      days:
+        description: "回填的交易日数量(默认 60,先小范围试跑;全量 250 天可能要跑 30-60+ 分钟)"
+        required: false
+        default: "60"
+      end_date:
+        description: "回填截止日期 YYYYMMDD(留空=今天)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: 安装依赖
+        run: pip install -r requirements.txt
+
+      - name: 回填历史数据
+        run: |
+          ARGS="--days ${{ github.event.inputs.days || '60' }}"
+          if [ -n "${{ github.event.inputs.end_date }}" ]; then
+            ARGS="$ARGS --end ${{ github.event.inputs.end_date }}"
+          fi
+          python src/backfill_temperature.py $ARGS
+
+      - name: 提交结果
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data docs
+          if git diff --cached --quiet; then
+            echo "无变更(可能已全部回填过),跳过提交。"
+          else
+            git commit -m "温度评分:历史数据回填"
+            git push
+          fi
+
+  deploy-pages:
+    needs: backfill
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: 发布看板到 gh-pages 分支
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./docs
+          force_orphan: true
+          commit_message: "发布看板"

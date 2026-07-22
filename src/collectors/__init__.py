@@ -18,3 +18,4 @@ class CollectorResult:
     notes: list = field(default_factory=list)        # 数据口径/失败说明
     history: pd.DataFrame | None = None              # main 写入历史后回填,供 analyzer 用
     stock_events: list = field(default_factory=list)  # 个股级别事件,供个股查询功能持久化
+    full_table: pd.DataFrame | None = None           # 可选:完整明细(不进日报,供网页按需查询单只个股用)

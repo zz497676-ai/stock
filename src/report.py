@@ -24,7 +24,11 @@ def _df_to_md(df: pd.DataFrame) -> str:
     return "\n".join([header, sep, *rows])
 
 
-def render(trade_date: date, results: list[tuple[CollectorResult, Verdict]]) -> str:
+def render(
+    trade_date: date,
+    results: list[tuple[CollectorResult, Verdict]],
+    leverage: CollectorResult | None = None,
+) -> str:
     lines: list[str] = []
     lines.append(f"# A股资金动向日报 · {trade_date.isoformat()}")
     lines.append("")
@@ -69,15 +73,38 @@ def render(trade_date: date, results: list[tuple[CollectorResult, Verdict]]) -> 
             for n in r.notes:
                 lines.append(f"> ⚠️ {n}")
 
+    # 个股杠杆监测(风险敞口而非资金流向,单独一节,不纳入七类资金打分)
+    if leverage is not None:
+        lines.append("")
+        lines.append("## 三、个股杠杆监测")
+        lines.append("")
+        lines.append("![两融资金参与度](charts/leverage.svg)")
+        lines.append("")
+        for ev in leverage.evidence:
+            lines.append(f"- {ev}")
+        for title, df in leverage.tables:
+            lines.append("")
+            lines.append(f"**{title}**")
+            lines.append("")
+            lines.append(_df_to_md(df))
+        if leverage.notes:
+            lines.append("")
+            for n in leverage.notes:
+                lines.append(f"> ⚠️ {n}")
+
     # 数据局限
     lines.append("")
-    lines.append("## 三、数据说明与局限")
+    lines.append("## 四、数据说明与局限")
     lines.append("")
     lines.append("- 国家队动向为行为推断(宽基ETF放量+指数走势组合),非官方口径;确认需等季报十大股东。")
     lines.append("- 险资/社保、主观私募无每日公开数据,相关结论置信度恒为低。")
     lines.append("- 量化动向以小微盘成交占比为代理,只反映整体活跃度,无法区分具体策略。")
     lines.append("- 游资识别依赖 config.yaml 中的席位关键词表,存在漏配;拉萨系席位计为散户通道。")
     lines.append("- 两融、龙虎榜等数据为 T+1 或盘后披露,个别接口更新时间不一。")
+    lines.append(
+        "- 个股杠杆排行剔除了流通市值过小的个股(阈值见 config.yaml),"
+        "融资余额/买入额与当日行情存在披露时点差异,仅作参考,不构成个股推荐。"
+    )
     if FETCH_ERRORS:
         lines.append("")
         lines.append("**本次运行失败的数据源:**")
