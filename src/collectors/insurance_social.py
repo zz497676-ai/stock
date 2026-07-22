@@ -31,6 +31,16 @@ def collect(trade_date: date) -> CollectorResult:
                 f"当日扫描持股变动公告 {len(notice)} 条,命中险资/社保关键词 {len(hits)} 条,"
                 f"需人工复核公告原文确认主体。"
             )
+            for _, row in hits.iterrows():
+                r.stock_events.append(
+                    {
+                        "code": str(row["代码"]),
+                        "name": str(row["名称"]),
+                        "type": "公告",
+                        "detail": str(row["公告标题"]),
+                        "amount": None,
+                    }
+                )
         else:
             r.evidence.append(
                 f"当日扫描持股变动公告 {len(notice)} 条,未发现涉险资/社保/举牌关键词。"

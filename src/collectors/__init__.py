@@ -17,3 +17,4 @@ class CollectorResult:
     evidence: list = field(default_factory=list)     # 文字证据(markdown 行)
     notes: list = field(default_factory=list)        # 数据口径/失败说明
     history: pd.DataFrame | None = None              # main 写入历史后回填,供 analyzer 用
+    stock_events: list = field(default_factory=list)  # 个股级别事件,供个股查询功能持久化

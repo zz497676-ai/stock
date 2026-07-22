@@ -101,9 +101,11 @@ def history_path(name: str) -> Path:
 
 
 def load_history(name: str) -> pd.DataFrame:
+    """按字符串读取全部列(dtype=str),避免 002131 这类前导零股票代码被当整数解析丢零。
+    调用方一律自行 pd.to_numeric() 转换数值列,这里不做类型推断。"""
     p = history_path(name)
     if p.exists():
-        return pd.read_csv(p, dtype={"date": str})
+        return pd.read_csv(p, dtype=str)
     return pd.DataFrame()
 
 
@@ -120,6 +122,24 @@ def upsert_history(name: str, d: date, metrics: dict, extra_key: str | None = No
         else:
             hist = hist[hist["date"] != d.isoformat()]
     hist = pd.concat([hist, pd.DataFrame([row])], ignore_index=True)
+    hist = hist.sort_values("date").reset_index(drop=True)
+    hist.to_csv(history_path(name), index=False)
+    return hist
+
+
+def append_events(name: str, d: date, rows: list[dict], keep_days: int = 120) -> pd.DataFrame:
+    """把当日多条个股事件追加到 data/<name>.csv(同日重跑先清空当日旧行再写入),
+    并按 keep_days 截断过老的历史,防止文件无限增长。"""
+    hist = load_history(name)
+    if not hist.empty:
+        hist = hist[hist["date"] != d.isoformat()]
+    new = pd.DataFrame(rows) if rows else pd.DataFrame(columns=["date"])
+    if not new.empty:
+        new.insert(0, "date", d.isoformat())
+    hist = pd.concat([hist, new], ignore_index=True) if not hist.empty else new
+    if not hist.empty:
+        cutoff = (d - timedelta(days=keep_days)).isoformat()
+        hist = hist[hist["date"] >= cutoff]
     hist = hist.sort_values("date").reset_index(drop=True)
     hist.to_csv(history_path(name), index=False)
     return hist

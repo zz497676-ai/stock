@@ -44,7 +44,7 @@ def _collect_data(trade_date: date) -> dict:
                 {
                     "date": row["date"],
                     "key": row["key"],
-                    "strength": None if pd.isna(s) else int(s),
+                    "strength": None if pd.isna(s) else int(float(s)),
                     "confidence": str(row.get("confidence", "")),
                     "summary": "" if pd.isna(row.get("summary")) else str(row["summary"]),
                 }
@@ -67,6 +67,28 @@ def _collect_data(trade_date: date) -> dict:
     }
 
 
+def _stock_events_json() -> dict:
+    hist = load_history("stock_events")
+    events = []
+    if not hist.empty:
+        hist = hist.copy()
+        hist["amount"] = pd.to_numeric(hist.get("amount"), errors="coerce")
+        for _, row in hist.sort_values("date").iterrows():
+            amt = row.get("amount")
+            events.append(
+                {
+                    "d": row["date"],
+                    "code": str(row["code"]),
+                    "name": str(row["name"]),
+                    "cat": str(row["category"]),
+                    "type": str(row["type"]),
+                    "detail": str(row["detail"]),
+                    "amt": None if pd.isna(amt) else round(float(amt), 4),
+                }
+            )
+    return {"events": events}
+
+
 def render_page(trade_date: date) -> str:
     data = json.dumps(_collect_data(trade_date), ensure_ascii=False)
     return (
@@ -80,6 +102,9 @@ def write_page(trade_date: date, out_dir=None) -> None:
     out = (out_dir or (ROOT / "docs"))
     out.mkdir(parents=True, exist_ok=True)
     (out / "index.html").write_text(render_page(trade_date), encoding="utf-8")
+    (out / "stock_events.json").write_text(
+        json.dumps(_stock_events_json(), ensure_ascii=False), encoding="utf-8"
+    )
 
 
 HTML_TEMPLATE = """<!doctype html>
@@ -129,6 +154,32 @@ svg text { font-family: inherit; fill: var(--ink); }
 .tt b { font-size: 12.5px; }
 .foot { color: var(--mut); font-size: 12px; line-height: 1.7; }
 a { color: var(--outflow); }
+
+.search-wrap { position: relative; }
+.search-wrap input { width: 100%; font-size: 15px; padding: 10px 14px; border-radius: 8px;
+  border: 1px solid var(--ring); background: var(--surface); color: var(--ink); }
+.search-wrap input:focus { outline: 2px solid var(--outflow); outline-offset: -1px; }
+.search-drop { position: absolute; left: 0; right: 0; top: calc(100% + 4px); background: var(--surface);
+  border: 1px solid var(--ring); border-radius: 8px; box-shadow: 0 6px 18px rgba(0,0,0,.14);
+  max-height: 260px; overflow-y: auto; z-index: 8; display: none; }
+.search-drop div { padding: 8px 14px; cursor: pointer; font-size: 14px; }
+.search-drop div:hover, .search-drop div.active { background: var(--neutral); }
+.search-drop .code { color: var(--mut); font-size: 12px; margin-left: 6px; }
+.stock-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 4px; }
+.stock-head .name { font-size: 17px; font-weight: 600; }
+.stock-head .code { color: var(--mut); font-size: 13px; font-variant-numeric: tabular-nums; }
+.timeline { list-style: none; margin: 12px 0 0; padding: 0; }
+.timeline li { display: flex; gap: 10px; padding: 9px 0; border-top: 1px solid var(--grid); }
+.timeline li:first-child { border-top: none; }
+.tl-date { color: var(--mut); font-size: 12px; width: 76px; flex: none;
+  font-variant-numeric: tabular-nums; padding-top: 1px; }
+.tl-cat { flex: none; font-size: 11px; padding: 2px 8px; border-radius: 999px; height: fit-content;
+  border: 1px solid var(--ring); color: var(--sec); white-space: nowrap; }
+.tl-body { flex: 1; font-size: 13.5px; line-height: 1.5; }
+.tl-dot { flex: none; width: 8px; height: 8px; border-radius: 999px; margin-top: 5px; }
+.tl-dot.pos { background: var(--inflow); } .tl-dot.neg { background: var(--outflow); }
+.tl-dot.zero { background: var(--mut); opacity: .4; }
+.empty-hint { color: var(--mut); font-size: 13px; padding: 6px 0; }
 </style>
 </head>
 <body>
@@ -136,6 +187,17 @@ a { color: var(--outflow); }
   <h1>A股资金动向看板</h1>
   <div class="sub">数据截至 __DATE__ · 每交易日自动更新 ·
     <a id="report-link" href="#">查看当日文字日报</a></div>
+
+  <div class="card">
+    <h2>个股查询</h2>
+    <div class="hint">输入股票代码或名称 · 覆盖游资(龙虎榜)、产业资本(增减持/回购/大宗)、
+      险资社保(公告)、散户(个股资金流,仅活跃股);国家队/公募/量化无个股颗粒度公开数据</div>
+    <div class="search-wrap">
+      <input id="stock-input" type="text" placeholder="例如 贵州茅台 或 600519" autocomplete="off">
+      <div class="search-drop" id="stock-drop"></div>
+    </div>
+    <div id="stock-result" style="margin-top:14px"></div>
+  </div>
 
   <div class="filters" id="range">
     <button data-n="7">近7日</button>
@@ -348,6 +410,76 @@ document.getElementById("range").addEventListener("click", ev => {
 });
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change", redraw);
 redraw();
+
+// ---- 个股查询 ----
+let STOCK_EVENTS = null, STOCK_INDEX = [];
+const stockInput = document.getElementById("stock-input");
+const stockDrop = document.getElementById("stock-drop");
+const stockResult = document.getElementById("stock-result");
+
+fetch("./stock_events.json").then(r => r.json()).then(data => {
+  STOCK_EVENTS = data.events || [];
+  const byCode = new Map();
+  STOCK_EVENTS.forEach(e => byCode.set(e.code, e.name));   // 后写入覆盖,取最新名称
+  STOCK_INDEX = [...byCode.entries()].map(([code, name]) => ({ code, name }));
+}).catch(() => { STOCK_EVENTS = []; });
+
+function matchStocks(q) {
+  q = q.trim().toLowerCase();
+  if (!q) return [];
+  return STOCK_INDEX.filter(s => s.code.includes(q) || s.name.toLowerCase().includes(q)).slice(0, 8);
+}
+
+function renderDrop(matches) {
+  stockDrop.innerHTML = "";
+  if (!matches.length) { stockDrop.style.display = "none"; return; }
+  matches.forEach(s => {
+    const d = document.createElement("div");
+    d.innerHTML = `${s.name}<span class="code">${s.code}</span>`;
+    d.addEventListener("click", () => { stockInput.value = s.name; stockDrop.style.display = "none"; renderStock(s.code); });
+    stockDrop.appendChild(d);
+  });
+  stockDrop.style.display = "block";
+}
+
+function renderStock(code) {
+  const rows = (STOCK_EVENTS || []).filter(e => e.code === code).sort((a, b) => b.d.localeCompare(a.d));
+  stockResult.innerHTML = "";
+  if (!rows.length) {
+    stockResult.innerHTML = `<div class="empty-hint">未查到该股票的记录 —— 可能是代码/名称有误,
+      或该股票在监控期内未出现在游资/产业资本/险资社保的公开数据、也不在当日活跃股之列。</div>`;
+    return;
+  }
+  const head = document.createElement("div");
+  head.className = "stock-head";
+  head.innerHTML = `<span class="name">${rows[0].name}</span><span class="code">${code}</span>`;
+  stockResult.appendChild(head);
+  const ul = document.createElement("ul"); ul.className = "timeline";
+  rows.forEach(e => {
+    const li = document.createElement("li");
+    const dotCls = e.amt === null || e.amt === undefined ? "zero" : (e.amt >= 0 ? "pos" : "neg");
+    const dotTitle = e.amt === null || e.amt === undefined ? "无方向数据" : (e.amt >= 0 ? "偏多头/流入信号" : "偏空头/流出信号");
+    li.innerHTML = `<span class="tl-date">${e.d.slice(5)}</span>
+      <span class="tl-cat">${e.cat} · ${e.type}</span>
+      <span class="tl-dot ${dotCls}" title="${dotTitle}"></span>
+      <span class="tl-body">${e.detail}</span>`;
+    ul.appendChild(li);
+  });
+  stockResult.appendChild(ul);
+}
+
+stockInput.addEventListener("input", () => renderDrop(matchStocks(stockInput.value)));
+stockInput.addEventListener("focus", () => renderDrop(matchStocks(stockInput.value)));
+stockInput.addEventListener("keydown", ev => {
+  if (ev.key === "Enter") {
+    const matches = matchStocks(stockInput.value);
+    if (matches.length) { stockInput.value = matches[0].name; renderStock(matches[0].code); }
+    stockDrop.style.display = "none";
+  }
+});
+document.addEventListener("click", ev => {
+  if (!ev.target.closest(".search-wrap")) stockDrop.style.display = "none";
+});
 </script>
 </body>
 </html>

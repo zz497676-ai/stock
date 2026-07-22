@@ -38,6 +38,18 @@ def collect(trade_date: date) -> CollectorResult:
         show["龙虎榜净买额"] = pd.to_numeric(show["龙虎榜净买额"], errors="coerce").map(yi)
         show["涨跌幅"] = pd.to_numeric(show["涨跌幅"], errors="coerce").map(lambda x: f"{x:+.2f}%")
         r.tables.append(("当日龙虎榜净买额前8个股", show))
+
+        for _, row in dedup.iterrows():
+            n = pd.to_numeric(row["龙虎榜净买额"], errors="coerce")
+            r.stock_events.append(
+                {
+                    "code": str(row["代码"]),
+                    "name": str(row["名称"]),
+                    "type": "龙虎榜",
+                    "detail": f"上榜:{row['上榜原因']};龙虎榜净买 {yi(n)}",
+                    "amount": None if pd.isna(n) else float(n),
+                }
+            )
     elif lhb is not None:
         r.notes.append("当日无个股上榜(或数据未更新)。")
     else:

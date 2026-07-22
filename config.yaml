@@ -63,6 +63,13 @@ insurance_keywords:
 # 异动判断的历史均值窗口(交易日)
 lookback_days: 20
 
+# 个股事件(供网页个股查询)保留的日历天数,超出自动截断防止文件无限增长
+stock_events_days: 120
+
+# 个股资金流(散户代理)只记录当日活跃股: 有游资/产业资本/险资事件的股票,
+# 外加按 |主力净流入| 排名前 N 的股票
+stock_flow_top_n: 150
+
 # 数据与报告输出目录
 data_dir: "data"
 reports_dir: "reports"

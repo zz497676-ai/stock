@@ -47,6 +47,20 @@ def collect(trade_date: date) -> CollectorResult:
             )
             r.tables.append((f"当日公告{label}(按占比前6)", show))
 
+            sign = 1 if label == "增持" else -1
+            for _, row in today.iterrows():
+                ratio = pd.to_numeric(row["持股变动信息-占总股本比例"], errors="coerce")
+                r.stock_events.append(
+                    {
+                        "code": str(row["代码"]),
+                        "name": str(row["名称"]),
+                        "type": f"股东{label}",
+                        "detail": f"{row['股东名称']}{label} {row['持股变动信息-变动数量']}股,"
+                                  f"占总股本{'' if pd.isna(ratio) else f'{ratio:.2f}'}%",
+                        "amount": None if pd.isna(ratio) else sign * float(ratio),
+                    }
+                )
+
     inc = r.metrics.get("holder_increase_count")
     dec = r.metrics.get("holder_decrease_count")
     if inc is not None and dec is not None:
@@ -64,6 +78,17 @@ def collect(trade_date: date) -> CollectorResult:
             f"当日更新回购公告 {r.metrics['repurchase_count']} 家,"
             f"披露已回购金额合计 {yi(done_amt)}。"
         )
+        for _, row in today.iterrows():
+            amt = pd.to_numeric(row.get("已回购金额"), errors="coerce")
+            r.stock_events.append(
+                {
+                    "code": str(row["股票代码"]),
+                    "name": str(row["股票简称"]),
+                    "type": "回购",
+                    "detail": f"回购进度:{row['实施进度']};已回购 {yi(amt)}",
+                    "amount": None if pd.isna(amt) else float(amt),
+                }
+            )
     else:
         r.notes.append("回购数据接口今日不可用。")
 
@@ -87,5 +112,25 @@ def collect(trade_date: date) -> CollectorResult:
             r.notes.append("大宗交易市场统计尚未更新到当日。")
     else:
         r.notes.append("大宗交易统计接口今日不可用。")
+
+    # 大宗交易个股明细(供个股查询:折溢价、买卖方营业部)
+    ds = trade_date.strftime("%Y%m%d")
+    mrmx = cached_fetch("stock_dzjy_mrmx", symbol="A股", start_date=ds, end_date=ds)
+    if mrmx is not None and not mrmx.empty:
+        for _, row in mrmx.iterrows():
+            disc = pd.to_numeric(row.get("折溢率"), errors="coerce")
+            amt = pd.to_numeric(row.get("成交额"), errors="coerce")
+            r.stock_events.append(
+                {
+                    "code": str(row["证券代码"]),
+                    "name": str(row["证券简称"]),
+                    "type": "大宗交易",
+                    "detail": f"成交价 {row['成交价']},折溢率 {'' if pd.isna(disc) else f'{disc:+.2f}'}%,"
+                              f"买方 {row['买方营业部']}",
+                    "amount": None if pd.isna(amt) else float(amt),
+                }
+            )
+    elif mrmx is None:
+        r.notes.append("大宗交易个股明细接口今日不可用。")
 
     return r

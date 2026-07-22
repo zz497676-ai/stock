@@ -12,10 +12,12 @@ import argparse
 import sys
 from datetime import date, datetime
 
+import pandas as pd
+
 import utils
 from analyzer import analyze
 from report import render, write_report
-from utils import is_trading_day, today_cst, upsert_history
+from utils import append_events, cached_fetch, is_trading_day, load_config, today_cst, upsert_history
 
 COLLECTOR_ORDER = [
     "national_team",
@@ -77,6 +79,47 @@ def run(trade_date: date, mock: bool = False, skip_calendar: bool = False) -> in
                 },
                 extra_key="key",
             )
+
+    # 个股事件持久化(供网页个股查询):汇总游资/产业资本/险资社保的个股级别原始事件,
+    # 再用当日全市场资金流补充"活跃股"的散户资金流一条,合并写入 data/stock_events.csv
+    if not mock:
+        try:
+            events = []
+            for r, _ in results:
+                for ev in r.stock_events:
+                    events.append({**ev, "category": r.title})
+
+            cfg = load_config()
+            top_n = int(cfg.get("stock_flow_top_n", 150))
+            flow = cached_fetch("stock_individual_fund_flow_rank", indicator="今日")
+            if flow is not None and not flow.empty:
+                flow = flow.copy()
+                flow["_main"] = pd.to_numeric(flow["今日主力净流入-净额"], errors="coerce")
+                flow["_small"] = pd.to_numeric(flow["今日小单净流入-净额"], errors="coerce")
+                event_codes = {e["code"] for e in events}
+                top_codes = set(
+                    flow.reindex(flow["_main"].abs().sort_values(ascending=False).index)
+                    .head(top_n)["代码"].astype(str)
+                )
+                wanted = event_codes | top_codes
+                flow = flow[flow["代码"].astype(str).isin(wanted)]
+                for _, row in flow.iterrows():
+                    small, main_f = row["_small"], row["_main"]
+                    events.append(
+                        {
+                            "code": str(row["代码"]),
+                            "name": str(row["名称"]),
+                            "category": "普通散户",
+                            "type": "资金流",
+                            "detail": f"当日小单净流入 {small / 1e8:+.2f}亿,主力净流入 {main_f / 1e8:+.2f}亿",
+                            "amount": None if pd.isna(main_f) else float(main_f),
+                        }
+                    )
+            keep_days = int(cfg.get("stock_events_days", 120))
+            append_events("stock_events", trade_date, events, keep_days=keep_days)
+            print(f"[events] 个股事件 {len(events)} 条已写入 data/stock_events.csv")
+        except Exception as e:  # noqa: BLE001 个股事件失败不影响日报主流程
+            print(f"[events] 个股事件持久化失败: {type(e).__name__}: {e}")
 
     # 生成图表(mock 写入独立目录,不污染正式产物)
     from charts import render_all

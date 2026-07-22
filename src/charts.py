@@ -145,7 +145,7 @@ def matrix_chart(order: list[tuple[str, str]], max_days: int = 40) -> str | None
             row = pivot.get((d, key))
             s = None
             if row is not None and pd.notna(row.get("strength")):
-                s = int(row["strength"])
+                s = int(float(row["strength"]))
             cls, op = _strength_class_opacity(s)
             b.append(f'<rect x="{x:.1f}" y="{y}" width="{cell_w:.1f}" '
                      f'height="{cell_h}" rx="3" class="{cls}" opacity="{op}"/>')
