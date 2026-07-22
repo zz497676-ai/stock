@@ -80,6 +80,8 @@
     <span><i style="background:var(--blue)"></i>成交额 放量</span>
     <span><i style="background:rgba(62,207,142,.75)"></i>成交额 缩量</span>
     <span><i class="ln" style="border-color:var(--yellow)"></i>Avg 分时均值累计</span>
+    <span><i style="background:#ffb020"></i>主力(超大单+大单) 净流入</span>
+    <span><i style="background:#38bdf8"></i>散户(小单) 净流入</span>
   </div>
   <div class="stage">
     <div class="panel panel-top"><canvas id="cvTop"></canvas></div>
@@ -87,7 +89,7 @@
     <div class="panel panel-bottom"><canvas id="cvBottom"></canvas></div>
     <div class="msg" id="msg"><div class="spin"></div><div>正在拉取个股分时行情…</div></div>
   </div>
-  <div class="foot">数据来源：东方财富 · 仅供学习参考，不构成投资建议 · 均值基准 <b id="dy">--</b> ｜ 今日 <b id="dt">--</b> · 主力资金净流入 <b id="mfTotal">--</b></div>
+  <div class="foot">数据来源：东方财富（大单/小单按委托金额估算，仅供参考） · 仅供学习参考，不构成投资建议 · 均值基准 <b id="dy">--</b> ｜ 今日 <b id="dt">--</b> · 主力净流入 <b id="mfTotal">--</b> ｜ 散户净流入 <b id="mfRetailTotal">--</b></div>
 
 <script>
 /* ============== 配置 ============== */
@@ -228,7 +230,7 @@ function processAndAlign(payload){
   return {times:template, y:avgArr, t:tArr, tDate, baseDates, baseFinals, stockPct, idxPct, curPrice, preClose:sPreClose};
 }
 
-/* ============== 主力资金净流入（尽力而为，失败自动隐藏） ============== */
+/* ============== 主力/散户资金净流入（尽力而为，失败自动隐藏） ============== */
 async function fetchMoneyFlow(code){
   const secid=toSecid(code);
   const url='https://push2.eastmoney.com/api/qt/stock/fflow/kline/get?lmt=0&klt=1&secid='+secid
@@ -236,12 +238,13 @@ async function fetchMoneyFlow(code){
   const d=await jsonp(url,12000);
   const klines=(d&&d.data&&d.data.klines)||[];
   if(!klines.length) throw new Error('无资金流向数据');
-  const map={};
+  const main={}, retail={};
   for(const line of klines){
     const p=line.split(',');
-    map[p[0]]=parseFloat(p[1])/1e4; // f52 主力净流入(元) → 万元，累计值
+    main[p[0]]=parseFloat(p[1])/1e4;   // f52 主力（超大单+大单）净流入(元) → 万元，累计值
+    retail[p[0]]=parseFloat(p[2])/1e4; // f53 小单净流入(元) → 万元，散户资金的常用代理指标
   }
-  return map;
+  return {main, retail};
 }
 
 /* ============== 画图（上中下三个联动面板） ============== */
@@ -249,7 +252,7 @@ const cvTop=document.getElementById('cvTop'), ctxTop=cvTop.getContext('2d');
 const cvMid=document.getElementById('cvMid'), ctxMid=cvMid.getContext('2d');
 const cvBottom=document.getElementById('cvBottom'), ctxBottom=cvBottom.getContext('2d');
 const PANEL_ML=58, PANEL_MR=54;
-let state=null, mf=null;
+let state=null, mf=null, mfRetail=null;
 let hoverIdx=-1, hoverPanel=null;
 
 function onHover(e,cv,panel){
@@ -410,11 +413,11 @@ function drawBottom(s){
 
   if(!mf || !mf.length){
     ctx.fillStyle='#8a98b5';ctx.textAlign='center';ctx.font='13px sans-serif';
-    ctx.fillText('主力资金净流入数据获取中或暂不可用', W/2, H/2);
+    ctx.fillText('资金净流入数据获取中或暂不可用', W/2, H/2);
     return;
   }
-  const validMf=mf.filter(v=>!isNaN(v));
-  const maxAbs=Math.max(10, ...validMf.map(Math.abs));
+  const validAll=[...mf,...(mfRetail||[])].filter(v=>!isNaN(v));
+  const maxAbs=Math.max(10, ...validAll.map(Math.abs));
   const toPx=v=> mT+ph*(1-(v+maxAbs)/(2*maxAbs));
 
   ctx.font='11px sans-serif';
@@ -428,11 +431,12 @@ function drawBottom(s){
   ctx.strokeStyle='rgba(160,170,200,.55)';ctx.lineWidth=1;
   ctx.beginPath();ctx.moveTo(mL,zy);ctx.lineTo(W-mR,zy);ctx.stroke();
 
+  if(mfRetail) drawLine(ctx,xAt,n,mfRetail,'#38bdf8',2,true,toPx);
   drawLine(ctx,xAt,n,mf,'#ffb020',2.2,true,toPx);
   drawXAxis(ctx,xAt,n,s.times,mT,mB,H,mL,mR,W);
   ctx.save();ctx.translate(14,mT+ph/2);ctx.rotate(-Math.PI/2);
   ctx.fillStyle='#9fb3d8';ctx.textAlign='center';ctx.font='12px sans-serif';
-  ctx.fillText('主力净流入 (万元)',0,0);ctx.restore();
+  ctx.fillText('资金净流入 (万元)',0,0);ctx.restore();
 
   if(hoverIdx>=0 && hoverIdx<n){
     const hx=xAt(hoverIdx);
@@ -452,11 +456,13 @@ function drawTooltipBox(ctx,W,mT,mR,hx){
     'Avg均值累计  '+(isNaN(s.y[idx])?'--':fmtStock(s.y[idx])),
     '今日累计  '+(isNaN(s.t[idx])?'--':fmtStock(s.t[idx])),
     'Diff  '+(isNaN(df)?'--':(df>=0?'+':'')+fmtStock(df)),
-    '主力净流入  '+((mf&&!isNaN(mf[idx]))?(mf[idx]>=0?'+':'')+fmtStock(mf[idx]):'--')
+    '主力净流入  '+((mf&&!isNaN(mf[idx]))?(mf[idx]>=0?'+':'')+fmtStock(mf[idx]):'--'),
+    '散户(小单)净流入  '+((mfRetail&&!isNaN(mfRetail[idx]))?(mfRetail[idx]>=0?'+':'')+fmtStock(mfRetail[idx]):'--')
   ];
   const colors=['#e8edf5','#2dd4bf','#b388ff','#FFC000','#70AD47',
     isNaN(df)||df>=0?'#ff5c5c':'#3ecf8e',
-    (mf&&mf[idx]>=0)?'#ff5c5c':'#3ecf8e'];
+    (mf&&mf[idx]>=0)?'#ff5c5c':'#3ecf8e',
+    (mfRetail&&mfRetail[idx]>=0)?'#ff5c5c':'#3ecf8e'];
   ctx.font='12px sans-serif';
   const tw=Math.max(...lines.map(l=>ctx.measureText(l).width))+20;
   const th=lines.length*18+12;
@@ -498,15 +504,18 @@ async function tick(isFirst){
     $('dy').textContent=s.baseDates.length?(s.baseDates.length+'日: '+s.baseDates[0]+' ~ '+s.baseDates[s.baseDates.length-1]):'--';
     $('dt').textContent=s.tDate;
 
-    // 主力资金净流入（独立请求，失败不影响主图）
+    // 主力/散户资金净流入（独立请求，失败不影响主图）
     try{
-      const mfMap=await fetchMoneyFlow(code);
-      mf=s.times.map(tm=>{ const v=mfMap[s.tDate+' '+tm]; return v!=null?v:NaN; });
+      const mfData=await fetchMoneyFlow(code);
+      mf=s.times.map(tm=>{ const v=mfData.main[s.tDate+' '+tm]; return v!=null?v:NaN; });
+      mfRetail=s.times.map(tm=>{ const v=mfData.retail[s.tDate+' '+tm]; return v!=null?v:NaN; });
       const validMf=mf.filter(v=>!isNaN(v));
+      const validRetail=mfRetail.filter(v=>!isNaN(v));
       $('mfTotal').textContent=validMf.length?fmtStock(validMf[validMf.length-1]):'--';
+      $('mfRetailTotal').textContent=validRetail.length?fmtStock(validRetail[validRetail.length-1]):'--';
     }catch(e){
-      console.warn('主力资金净流入获取失败:',e);
-      mf=null; $('mfTotal').textContent='--';
+      console.warn('资金净流入获取失败:',e);
+      mf=null; mfRetail=null; $('mfTotal').textContent='--'; $('mfRetailTotal').textContent='--';
     }
 
     drawTop(s); drawMid(s); drawBottom(s);
@@ -536,7 +545,7 @@ function switchStock(code){
   curCode=code; lsSet('lastStockCode',code);
   $('msg').classList.remove('hidden');
   $('msg').innerHTML='<div class="spin"></div><div>正在拉取个股分时行情…</div>';
-  state=null; mf=null;
+  state=null; mf=null; mfRetail=null;
   tick(true);
 }
 
