@@ -25,7 +25,7 @@
     }
   </style>
 <rect x="0" y="0" width="760" height="298" class="surface" rx="8"/>
-<text x="20" y="30" font-size="16" font-weight="600">动向矩阵 · 近6个交易日</text>
+<text x="20" y="30" font-size="16" font-weight="600">动向矩阵 · 近7个交易日</text>
 <text x="740" y="30" font-size="12" text-anchor="end" class="mut">红=流入 蓝=流出 灰=中性/缺数据</text>
 <text x="138" y="73.0" font-size="13" text-anchor="end">国家队</text>
 <rect x="150.0" y="56" width="24.0" height="26" rx="3" class="neutral" opacity="1.0"/>
@@ -34,6 +34,7 @@
 <rect x="228.0" y="56" width="24.0" height="26" rx="3" class="neutral" opacity="1.0"/>
 <rect x="254.0" y="56" width="24.0" height="26" rx="3" class="neutral" opacity="1.0"/>
 <rect x="280.0" y="56" width="24.0" height="26" rx="3" class="neutral" opacity="1.0"/>
+<rect x="306.0" y="56" width="24.0" height="26" rx="3" class="neutral" opacity="1.0"/>
 <text x="138" y="101.0" font-size="13" text-anchor="end">险资与社保</text>
 <rect x="150.0" y="84" width="24.0" height="26" rx="3" class="neutral" opacity="1.0"/>
 <rect x="176.0" y="84" width="24.0" height="26" rx="3" class="neutral" opacity="1.0"/>
@@ -41,6 +42,7 @@
 <rect x="228.0" y="84" width="24.0" height="26" rx="3" class="neutral" opacity="1.0"/>
 <rect x="254.0" y="84" width="24.0" height="26" rx="3" class="neutral" opacity="1.0"/>
 <rect x="280.0" y="84" width="24.0" height="26" rx="3" class="neutral" opacity="1.0"/>
+<rect x="306.0" y="84" width="24.0" height="26" rx="3" class="neutral" opacity="1.0"/>
 <text x="138" y="129.0" font-size="13" text-anchor="end">公募基金(附:主观私募)</text>
 <rect x="150.0" y="112" width="24.0" height="26" rx="3" class="neutral" opacity="1.0"/>
 <rect x="176.0" y="112" width="24.0" height="26" rx="3" class="neutral" opacity="1.0"/>
@@ -48,6 +50,7 @@
 <rect x="228.0" y="112" width="24.0" height="26" rx="3" class="inflow" opacity="0.55"/>
 <rect x="254.0" y="112" width="24.0" height="26" rx="3" class="inflow" opacity="1.0"/>
 <rect x="280.0" y="112" width="24.0" height="26" rx="3" class="neutral" opacity="1.0"/>
+<rect x="306.0" y="112" width="24.0" height="26" rx="3" class="outflow" opacity="0.55"/>
 <text x="138" y="157.0" font-size="13" text-anchor="end">量化资金</text>
 <rect x="150.0" y="140" width="24.0" height="26" rx="3" class="neutral" opacity="1.0"/>
 <rect x="176.0" y="140" width="24.0" height="26" rx="3" class="neutral" opacity="1.0"/>
@@ -55,6 +58,7 @@
 <rect x="228.0" y="140" width="24.0" height="26" rx="3" class="neutral" opacity="1.0"/>
 <rect x="254.0" y="140" width="24.0" height="26" rx="3" class="neutral" opacity="1.0"/>
 <rect x="280.0" y="140" width="24.0" height="26" rx="3" class="neutral" opacity="1.0"/>
+<rect x="306.0" y="140" width="24.0" height="26" rx="3" class="neutral" opacity="1.0"/>
 <text x="138" y="185.0" font-size="13" text-anchor="end">游资</text>
 <rect x="150.0" y="168" width="24.0" height="26" rx="3" class="inflow" opacity="0.55"/>
 <rect x="176.0" y="168" width="24.0" height="26" rx="3" class="neutral" opacity="1.0"/>
@@ -62,6 +66,7 @@
 <rect x="228.0" y="168" width="24.0" height="26" rx="3" class="inflow" opacity="0.55"/>
 <rect x="254.0" y="168" width="24.0" height="26" rx="3" class="inflow" opacity="1.0"/>
 <rect x="280.0" y="168" width="24.0" height="26" rx="3" class="inflow" opacity="0.55"/>
+<rect x="306.0" y="168" width="24.0" height="26" rx="3" class="inflow" opacity="0.55"/>
 <text x="138" y="213.0" font-size="13" text-anchor="end">产业资本</text>
 <rect x="150.0" y="196" width="24.0" height="26" rx="3" class="neutral" opacity="1.0"/>
 <rect x="176.0" y="196" width="24.0" height="26" rx="3" class="neutral" opacity="1.0"/>
@@ -69,6 +74,7 @@
 <rect x="228.0" y="196" width="24.0" height="26" rx="3" class="inflow" opacity="0.55"/>
 <rect x="254.0" y="196" width="24.0" height="26" rx="3" class="inflow" opacity="0.55"/>
 <rect x="280.0" y="196" width="24.0" height="26" rx="3" class="inflow" opacity="0.55"/>
+<rect x="306.0" y="196" width="24.0" height="26" rx="3" class="neutral" opacity="1.0"/>
 <text x="138" y="241.0" font-size="13" text-anchor="end">普通散户</text>
 <rect x="150.0" y="224" width="24.0" height="26" rx="3" class="outflow" opacity="0.55"/>
 <rect x="176.0" y="224" width="24.0" height="26" rx="3" class="outflow" opacity="0.55"/>
@@ -76,7 +82,9 @@
 <rect x="228.0" y="224" width="24.0" height="26" rx="3" class="outflow" opacity="0.55"/>
 <rect x="254.0" y="224" width="24.0" height="26" rx="3" class="outflow" opacity="0.55"/>
 <rect x="280.0" y="224" width="24.0" height="26" rx="3" class="neutral" opacity="1.0"/>
+<rect x="306.0" y="224" width="24.0" height="26" rx="3" class="neutral" opacity="1.0"/>
 <text x="150.0" y="280" font-size="10" text-anchor="start" class="mut">07-15</text>
 <text x="214.0" y="280" font-size="10" text-anchor="middle" class="mut">07-17</text>
 <text x="240.0" y="280" font-size="10" text-anchor="middle" class="mut">07-20</text>
-<text x="304.0" y="280" font-size="10" text-anchor="end" class="mut">07-22</text></svg>
+<text x="266.0" y="280" font-size="10" text-anchor="middle" class="mut">07-21</text>
+<text x="330.0" y="280" font-size="10" text-anchor="end" class="mut">07-23</text></svg>
