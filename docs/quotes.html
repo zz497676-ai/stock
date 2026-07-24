@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>六宫格看盘</title>
+<style>
+:root {
+  color-scheme: light dark;
+  --page: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --sec: #52514e;
+  --mut: #898781; --grid: #e1e0d9; --axis: #c3c2b7;
+  --rise: #e34948; --fall: #2a9d5c; --warn: #c98a1f; --neutral: #f0efec;
+  --line: #2a78d6; --ring: rgba(11,11,11,0.10);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --page: #0d0d0d; --surface: #1a1a19; --ink: #ffffff; --sec: #c3c2b7;
+    --grid: #2c2c2a; --axis: #383835;
+    --rise: #e66767; --fall: #3fbf7f; --warn: #d9a441; --neutral: #383835;
+    --line: #3987e5; --ring: rgba(255,255,255,0.10);
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--ink);
+  font-family: system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; }
+.wrap { max-width: 1080px; margin: 0 auto; padding: 24px 16px 48px; }
+.topnav { font-size: 13px; margin-bottom: 10px; }
+.topnav a { color: var(--line); text-decoration: none; }
+h1 { font-size: 22px; margin: 0 0 4px; }
+.sub { color: var(--mut); font-size: 13px; margin-bottom: 16px; line-height: 1.6; }
+.controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 16px;
+  background: var(--surface); border: 1px solid var(--ring); border-radius: 10px; padding: 10px 12px; }
+.controls label { font-size: 12.5px; color: var(--mut); }
+.controls select, .controls button { border: 1px solid var(--ring); background: var(--page); color: var(--ink);
+  border-radius: 7px; padding: 6px 10px; font-size: 13px; cursor: pointer; }
+.controls button.on { border-color: var(--axis); background: var(--neutral); font-weight: 600; }
+.status { font-size: 12.5px; color: var(--mut); margin-left: auto; }
+.status.err { color: var(--rise); }
+.board { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+@media (max-width: 760px) { .board { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 460px) { .board { grid-template-columns: 1fr; } }
+.cell { background: var(--surface); border: 1px solid var(--ring); border-radius: 10px; padding: 12px 14px; min-height: 168px; }
+.cell input.code { width: 100%; padding: 6px 8px; border-radius: 7px; border: 1px solid var(--ring);
+  background: var(--page); color: var(--ink); font-size: 12.5px; margin-bottom: 8px; font-family: inherit; }
+.cell .name { font-size: 14px; font-weight: 600; }
+.cell .code-lbl { font-size: 11.5px; color: var(--mut); margin-left: 4px; }
+.cell .price { font-size: 26px; font-weight: 700; margin: 6px 0 2px; line-height: 1.2; }
+.cell .chg { font-size: 13px; margin-bottom: 8px; }
+.cell.rise .price, .cell.rise .chg { color: var(--rise); }
+.cell.fall .price, .cell.fall .chg { color: var(--fall); }
+.mini { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px; font-size: 12px; color: var(--sec); }
+.mini .k { color: var(--mut); }
+.mini .v { text-align: right; }
+.cell .foot { font-size: 11px; color: var(--mut); margin-top: 8px; }
+.cell .empty { color: var(--mut); font-size: 13px; padding: 14px 0; text-align: center; }
+.cell .errline { color: var(--rise); font-size: 12px; margin-top: 6px; }
+.foot-note { color: var(--mut); font-size: 12px; line-height: 1.7; margin-top: 18px; }
+.card { background: var(--surface); border: 1px solid var(--ring); border-radius: 10px; padding: 16px 18px; margin-top: 16px; }
+[hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topnav"><a href="index.html">← 返回资金动向看板</a></div>
+  <h1>六宫格看盘</h1>
+  <div class="sub">自选最多 6 只股票或指数同屏查看行情,代码直接填在每个格子里,自动保存在你当前浏览器。
+    行情数据通过浏览器直接请求新浪/腾讯的公开行情接口获取,不经过本站服务器,可能有几秒到几分钟延迟,仅供参考,不构成投资建议。</div>
+
+  <div class="controls">
+    <label>刷新间隔</label>
+    <select id="interval">
+      <option value="3000">3 秒</option>
+      <option value="5000" selected>5 秒</option>
+      <option value="10000">10 秒</option>
+      <option value="30000">30 秒</option>
+      <option value="60000">60 秒</option>
+    </select>
+    <button id="pauseBtn">暂停自动刷新</button>
+    <button id="refreshBtn">立即刷新</button>
+    <span class="status" id="status">加载中…</span>
+  </div>
+
+  <div class="board" id="board"></div>
+
+  <div class="card foot-note">
+    代码填法:6 位数字自动判断市场(6 开头=沪市,0/3 开头=深市,4/8 开头=北交所);
+    指数请带上前缀,如 sh000001(上证指数)、sz399001(深证成指)、sz399006(创业板指)。
+    格子留空则不请求。数据源优先新浪财经,失败时自动切换腾讯财经;两家都请求不到时会显示"获取失败"并按刷新间隔自动重试,
+    常见于所在网络屏蔽了这两个域名(和本站生成日报时 GitHub Actions 连不上行情源是同一类限制,与浏览器本身无关)。
+    非交易时段展示的是最近一次收盘/成交数据。
+  </div>
+</div>
+<script>
+const $ = id => document.getElementById(id);
+const LS_CODES = "sixGrid.codes";
+const LS_INTERVAL = "sixGrid.interval";
+const N = 6;
+const DEFAULT_CODES = ["sh000001", "sz399001", "sz399006", "600519", "000858", "300750"];
+
+function loadCodes() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(LS_CODES) || "null");
+    if (Array.isArray(saved) && saved.length === N) return saved;
+  } catch (e) {}
+  return DEFAULT_CODES.slice();
+}
+function saveCodes(codes) { localStorage.setItem(LS_CODES, JSON.stringify(codes)); }
+
+let codes = loadCodes();
+let lastData = {}; // symbol -> parsed quote
+let paused = false;
+let timer = null;
+
+function normalizeCode(raw) {
+  const s = String(raw || "").trim().toLowerCase();
+  if (!s) return null;
+  if (/^(sh|sz|bj)\d{6}$/.test(s)) return s;
+  if (/^\d{6}$/.test(s)) {
+    const d0 = s[0];
+    let prefix = "sz";
+    if (d0 === "6") prefix = "sh";
+    else if (d0 === "4" || d0 === "8") prefix = "bj";
+    else if (d0 === "0" || d0 === "3") prefix = "sz";
+    return prefix + s;
+  }
+  return null;
+}
+
+function fmtVol(shares) {
+  if (shares === null || shares === undefined || isNaN(shares)) return "—";
+  if (shares >= 1e6) return (shares / 1e6).toFixed(2) + "万手";
+  return Math.round(shares / 100) + "手";
+}
+function fmtAmount(yuan) {
+  if (yuan === null || yuan === undefined || isNaN(yuan)) return "—";
+  if (yuan >= 1e8) return (yuan / 1e8).toFixed(2) + "亿";
+  if (yuan >= 1e4) return (yuan / 1e4).toFixed(1) + "万";
+  return Math.round(yuan) + "元";
+}
+function fmtPrice(n) { return (n === null || n === undefined || isNaN(n)) ? "—" : Number(n).toFixed(2); }
+
+// ---- 拉取行情:script 标签 JSONP,不受 CORS 限制;超时/网络失败会 reject ----
+function loadScript(src, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    const timer = setTimeout(() => { cleanup(); reject(new Error("timeout")); }, timeoutMs);
+    function cleanup() { clearTimeout(timer); script.remove(); }
+    script.onload = () => { cleanup(); resolve(); };
+    script.onerror = () => { cleanup(); reject(new Error("network")); };
+    script.src = src;
+    document.head.appendChild(script);
+  });
+}
+
+async function fetchViaSina(symbols) {
+  await loadScript(`https://hq.sinajs.cn/list=${symbols.join(",")}&_=${Date.now()}`, 6000);
+  const out = {};
+  symbols.forEach(sym => {
+    const raw = window["hq_str_" + sym];
+    if (!raw || raw.length < 10) return;
+    const f = raw.split(",");
+    const prevClose = parseFloat(f[2]), current = parseFloat(f[3]);
+    out[sym] = {
+      name: f[0], open: parseFloat(f[1]), prevClose, current,
+      high: parseFloat(f[4]), low: parseFloat(f[5]),
+      volume: parseFloat(f[8]), amount: parseFloat(f[9]),
+      time: (f[30] || "") + " " + (f[31] || ""),
+    };
+  });
+  if (Object.keys(out).length === 0) throw new Error("empty");
+  return out;
+}
+
+async function fetchViaTencent(symbols) {
+  await loadScript(`https://qt.gtimg.cn/q=${symbols.join(",")}&_=${Date.now()}`, 6000);
+  const out = {};
+  symbols.forEach(sym => {
+    const raw = window["v_" + sym];
+    if (!raw || raw.length < 10) return;
+    const f = raw.split("~");
+    const prevClose = parseFloat(f[4]), current = parseFloat(f[3]);
+    out[sym] = {
+      name: f[1], open: parseFloat(f[5]), prevClose, current,
+      high: parseFloat(f[33]), low: parseFloat(f[34]),
+      volume: parseFloat(f[36]) * 100, amount: parseFloat(f[37]) * 10000,
+      time: f[30] || "",
+    };
+  });
+  if (Object.keys(out).length === 0) throw new Error("empty");
+  return out;
+}
+
+function renderInputs() {
+  const board = $("board");
+  board.innerHTML = "";
+  for (let i = 0; i < N; i++) {
+    const cell = document.createElement("div");
+    cell.className = "cell";
+    cell.id = "cell" + i;
+    cell.innerHTML = `<input class="code" data-idx="${i}" placeholder="代码,如 600519 / sh000001" value="${codes[i] || ""}">
+      <div class="body" id="cellBody${i}"></div>`;
+    board.appendChild(cell);
+  }
+  board.querySelectorAll("input.code").forEach(inp => {
+    inp.addEventListener("change", () => {
+      const idx = +inp.dataset.idx;
+      codes[idx] = inp.value.trim();
+      saveCodes(codes);
+      fetchAll();
+    });
+  });
+  renderBodies();
+}
+
+function renderBodies() {
+  for (let i = 0; i < N; i++) {
+    const cell = $("cell" + i);
+    const body = $("cellBody" + i);
+    const raw = codes[i];
+    const sym = normalizeCode(raw);
+    cell.classList.remove("rise", "fall");
+    if (!raw) { body.innerHTML = `<div class="empty">留空,填入代码开始关注</div>`; continue; }
+    if (!sym) { body.innerHTML = `<div class="errline">代码格式无法识别</div>`; continue; }
+    const q = lastData[sym];
+    if (!q) { body.innerHTML = `<div class="errline">暂无数据,检查代码或稍后重试</div>`; continue; }
+    const chg = q.current - q.prevClose;
+    const chgPct = q.prevClose ? (chg / q.prevClose * 100) : 0;
+    if (chg > 0) cell.classList.add("rise");
+    else if (chg < 0) cell.classList.add("fall");
+    body.innerHTML = `
+      <div><span class="name">${q.name || sym}</span><span class="code-lbl">${sym}</span></div>
+      <div class="price">${fmtPrice(q.current)}</div>
+      <div class="chg">${chg >= 0 ? "+" : ""}${fmtPrice(chg)} (${chgPct >= 0 ? "+" : ""}${chgPct.toFixed(2)}%)</div>
+      <div class="mini">
+        <div class="k">今开</div><div class="v">${fmtPrice(q.open)}</div>
+        <div class="k">昨收</div><div class="v">${fmtPrice(q.prevClose)}</div>
+        <div class="k">最高</div><div class="v">${fmtPrice(q.high)}</div>
+        <div class="k">最低</div><div class="v">${fmtPrice(q.low)}</div>
+        <div class="k">成交量</div><div class="v">${fmtVol(q.volume)}</div>
+        <div class="k">成交额</div><div class="v">${fmtAmount(q.amount)}</div>
+      </div>
+      <div class="foot">${q.time || ""}</div>`;
+  }
+}
+
+async function fetchAll() {
+  const symbols = [...new Set(codes.map(normalizeCode).filter(Boolean))];
+  const statusEl = $("status");
+  if (symbols.length === 0) {
+    statusEl.textContent = "所有格子都是空的,填入代码开始关注";
+    statusEl.className = "status";
+    renderBodies();
+    return;
+  }
+  statusEl.textContent = "刷新中…";
+  statusEl.className = "status";
+  try {
+    const data = await fetchViaSina(symbols);
+    lastData = { ...lastData, ...data };
+    statusEl.textContent = `最近更新 ${new Date().toLocaleTimeString("zh-CN")} · 数据源:新浪`;
+  } catch (e) {
+    try {
+      const data = await fetchViaTencent(symbols);
+      lastData = { ...lastData, ...data };
+      statusEl.textContent = `最近更新 ${new Date().toLocaleTimeString("zh-CN")} · 数据源:腾讯`;
+    } catch (e2) {
+      statusEl.textContent = "行情获取失败(新浪、腾讯均无法访问),将按刷新间隔自动重试,已保留上次数据";
+      statusEl.className = "status err";
+    }
+  }
+  renderBodies();
+}
+
+function startTimer() {
+  if (timer) clearInterval(timer);
+  if (paused) return;
+  const ms = parseInt($("interval").value, 10);
+  timer = setInterval(fetchAll, ms);
+}
+
+$("interval").value = localStorage.getItem(LS_INTERVAL) || "5000";
+$("interval").addEventListener("change", () => {
+  localStorage.setItem(LS_INTERVAL, $("interval").value);
+  startTimer();
+});
+$("pauseBtn").addEventListener("click", () => {
+  paused = !paused;
+  $("pauseBtn").textContent = paused ? "继续自动刷新" : "暂停自动刷新";
+  $("pauseBtn").classList.toggle("on", paused);
+  startTimer();
+});
+$("refreshBtn").addEventListener("click", () => { fetchAll(); startTimer(); });
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) {
+    if (timer) clearInterval(timer);
+  } else {
+    fetchAll();
+    startTimer();
+  }
+});
+
+renderInputs();
+fetchAll();
+startTimer();
+</script>
+</body>
+</html>
