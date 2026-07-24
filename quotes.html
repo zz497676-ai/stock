@@ -1,0 +1,770 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>六宫格看盘 · 量化盯盘终端</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/lightweight-charts@4/dist/lightweight-charts.standalone.production.js"></script>
+<style>
+  html, body { height: 100%; }
+  @keyframes flash-gold { 0%,100%{ box-shadow: 0 0 0 0 rgba(234,179,8,0); border-color:#334155; } 50%{ box-shadow: 0 0 20px 4px rgba(234,179,8,.85); border-color:#eab308; } }
+  @keyframes flash-up   { 0%,100%{ box-shadow: 0 0 0 0 rgba(34,197,94,0);  border-color:#334155; } 50%{ box-shadow: 0 0 20px 4px rgba(34,197,94,.85);  border-color:#22c55e; } }
+  @keyframes flash-down { 0%,100%{ box-shadow: 0 0 0 0 rgba(239,68,68,0); border-color:#334155; } 50%{ box-shadow: 0 0 20px 4px rgba(239,68,68,.85); border-color:#ef4444; } }
+  .flash-gold { animation: flash-gold .6s ease-in-out 3; }
+  .flash-up   { animation: flash-up .5s ease-in-out 3; }
+  .flash-down { animation: flash-down .5s ease-in-out 3; }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+  .board-main { min-height: 640px; }
+</style>
+</head>
+<body class="bg-[#0f172a] text-slate-200 min-h-screen flex flex-col font-sans">
+
+<div class="px-4 pt-2 text-xs shrink-0"><a href="index.html" class="text-blue-400 hover:text-blue-300 no-underline">← 返回资金动向看板</a></div>
+
+<header class="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2 border-b border-slate-700 bg-[#111827] shrink-0 mt-2">
+  <h1 class="text-sm font-bold tracking-wide text-slate-100 whitespace-nowrap">六宫格看盘 · 量化盯盘终端</h1>
+
+  <div class="flex items-center gap-0.5 bg-slate-800 rounded-lg p-0.5 text-xs" id="scaleModeToggle">
+    <button data-mode="price" class="scale-btn px-3 py-1 rounded-md transition-colors">价格 Price</button>
+    <button data-mode="percent" class="scale-btn px-3 py-1 rounded-md transition-colors">百分比 %</button>
+  </div>
+
+  <button id="backToGridBtn" class="hidden text-xs px-3 py-1.5 rounded-md bg-blue-600 hover:bg-blue-500 transition-colors whitespace-nowrap">← 返回全局 6 股</button>
+
+  <label class="text-xs text-slate-400">刷新间隔</label>
+  <select id="interval" class="bg-slate-800 border border-slate-700 rounded-md text-xs px-2 py-1.5 text-slate-200">
+    <option value="3000">3 秒</option>
+    <option value="5000" selected>5 秒</option>
+    <option value="10000">10 秒</option>
+    <option value="30000">30 秒</option>
+    <option value="60000">60 秒</option>
+  </select>
+  <button id="pauseBtn" class="text-xs px-3 py-1.5 rounded-md bg-slate-800 hover:bg-slate-700 transition-colors whitespace-nowrap">暂停自动刷新</button>
+  <button id="refreshBtn" class="text-xs px-3 py-1.5 rounded-md bg-slate-800 hover:bg-slate-700 transition-colors whitespace-nowrap">立即刷新</button>
+
+  <div class="ml-auto flex items-center gap-4 text-xs text-slate-400 whitespace-nowrap">
+    <span id="focusLabel" class="text-amber-400 font-medium"></span>
+    <span id="status">加载中…</span>
+    <span class="font-mono" id="clock"></span>
+  </div>
+</header>
+
+<main class="flex-1 grid grid-cols-3 grid-rows-2 gap-1 p-1 board-main" id="board"></main>
+
+<div class="mx-1 mb-2 mt-1 rounded-lg border border-slate-700 bg-[#111827] px-4 py-3 text-[11px] leading-relaxed text-slate-400 shrink-0">
+  代码填法:6 位数字自动判断市场(6 开头=沪市,0/3 开头=深市,4/8 开头=北交所);指数请带前缀,如 sh000001(上证指数)、sz399001(深证成指)、sz399006(创业板指)。
+  六宫格主视图默认日K,现价/涨跌幅每 <span id="footInterval">5</span> 秒随实时报价刷新一次,同步推动最新一根K线:
+  今天的日K还没走完就原地更新收盘价/最高/最低/成交量,服务端还没吐出今天这根就先补一根;K 线本身(含历史)每 60 秒
+  (或切代码/切周期时立即)向数据源整体刷新一次做权威纠正。周一至周五 9:15(含开盘集合竞价)-11:30、13:00-15:00
+  按你设的间隔轮询,非交易时段自动降频到 5 分钟一次。
+  单股多周期(点格子右上角"⤢")固定为 5分/15分/30分/60分/日K/周K——A 股没有现成的 1 分钟或 4 小时 K 线公开接口,周K 由日K 在浏览器本地按自然周聚合而成,不是单独请求的。
+  行情与 K 线均来自新浪财经(主)/腾讯财经(备)的公开接口,浏览器直接请求,不经过本站服务器,可能有延迟;两家都请求不到时格子会保留上一次数据并提示"获取失败",自动按间隔重试。
+  仅供参考,不构成任何投资建议。
+</div>
+
+<script>
+(() => {
+"use strict";
+
+// ============================================================
+// 常量
+// ============================================================
+const UP = "#22c55e", DOWN = "#ef4444";
+const N = 6;
+const DEFAULT_CODES = ["sh000001", "sz399001", "sz399006", "600519", "000858", "300750"];
+const TIMEFRAMES = ["5m", "15m", "30m", "60m", "D", "W"];
+const TF_LABEL = { "5m": "5分", "15m": "15分", "30m": "30分", "60m": "60分", "D": "日K", "W": "周K" };
+const SCALE_OF_TF = { "5m": 5, "15m": 15, "30m": 30, "60m": 60, "D": 240 };
+const TF_SECONDS = { "5m": 300, "15m": 900, "30m": 1800, "60m": 3600 };
+const DEFAULT_TF = "D";        // 六宫格主视图固定周期(日K,更贴合盯盘+爆量预警的默认视角)
+const KLINE_DATALEN = 500;     // 单次拉取的K线根数上限(接口本身最多约1023)
+const SLOW_REFRESH_MS = 60000; // K线权威数据的最小刷新间隔
+const MAX_CACHE_ENTRIES = 60;  // klineCache 的粗略上限,长期挂机、来回换代码时防止无限增长
+const LS_CODES = "sixGrid.codes";
+const LS_INTERVAL = "sixGrid.interval";
+
+const $ = (sel, root = document) => root.querySelector(sel);
+
+// ============================================================
+// 小工具
+// ============================================================
+function fmtPrice(n) {
+  if (!isFinite(n)) return "--";
+  if (n >= 1000) return n.toFixed(1);
+  if (n >= 1) return n.toFixed(2);
+  return n.toFixed(4);
+}
+function normalizeCode(raw) {
+  const s = String(raw || "").trim().toLowerCase();
+  if (!s) return null;
+  if (/^(sh|sz|bj)\d{6}$/.test(s)) return s;
+  if (/^\d{6}$/.test(s)) {
+    const d0 = s[0];
+    let prefix = "sz";
+    if (d0 === "6") prefix = "sh";
+    else if (d0 === "4" || d0 === "8") prefix = "bj";
+    return prefix + s;
+  }
+  return null;
+}
+// 把 "YYYY-MM-DD[ HH:MM:SS]" 当作北京时间(UTC+8)解析成秒级 unix 时间戳,
+// 不依赖访问者浏览器所在时区(否则非北京时区打开会全部错位)。
+function parseBeijingTime(s) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2}):(\d{2}))?/.exec(s || "");
+  if (!m) return NaN;
+  const Y = +m[1], Mo = +m[2], D = +m[3], H = +(m[4] || 0), Mi = +(m[5] || 0), S = +(m[6] || 0);
+  return Math.floor(Date.UTC(Y, Mo - 1, D, H, Mi, S) / 1000) - 8 * 3600;
+}
+function pad2(n) { return String(n).padStart(2, "0"); }
+// 秒级 unix 时间戳 -> 北京时间的 "YYYY-MM-DD"。日K/周K 在 Lightweight Charts 里用这种
+// business-day 字符串存,图表横轴才会按"交易日"均匀排列、周末不留空档;分钟K继续用数字时间戳。
+function beijingDateStrFromSec(unixSec) {
+  const d = new Date((unixSec + 8 * 3600) * 1000);
+  return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}`;
+}
+// 把接口返回的任意日期/日期时间字符串,统一成北京时间的 "YYYY-MM-DD"
+function toDateStr(s) {
+  const sec = parseBeijingTime(s);
+  return isFinite(sec) ? beijingDateStrFromSec(sec) : null;
+}
+function nowBeijing() {
+  return new Date(Date.now() + 8 * 3600 * 1000);
+}
+function todayBeijingStr() {
+  return beijingDateStrFromSec(Math.floor(Date.now() / 1000));
+}
+// A股交易时段判断(周一至周五 9:15-11:30 / 13:00-15:00,北京时间,9:15 起把开盘集合竞价也纳入);
+// 不含节假日休市表,节假日会被误判成"该交易"从而按快频轮询,但公开接口这天本来也没有新数据,只是白请求几次,无害。
+function isTradingHours() {
+  const bj = nowBeijing();
+  const day = bj.getUTCDay();
+  if (day === 0 || day === 6) return false;
+  const mins = bj.getUTCHours() * 60 + bj.getUTCMinutes();
+  return (mins >= 9 * 60 + 15 && mins <= 11 * 60 + 30) || (mins >= 13 * 60 && mins <= 15 * 60);
+}
+// 按 time 去重(后出现的覆盖先出现的)+ 升序排序;数字时间戳和 "YYYY-MM-DD" 字符串直接用
+// 大小比较符就能比出正确的先后顺序。喂给 series.setData() 前统一过一遍,防止极端情况下(比如慢速
+// 刷新和活价更新前后脚回来)出现重复/乱序时间戳把图表搞崩;顺带按 KLINE_DATALEN 裁剪长度,超出从头部丢。
+function sortDedupeBars(bars) {
+  const map = new Map();
+  bars.forEach(b => map.set(String(b.time), b));
+  const out = [...map.values()].sort((a, b) => (a.time < b.time ? -1 : a.time > b.time ? 1 : 0));
+  return out.length > KLINE_DATALEN ? out.slice(out.length - KLINE_DATALEN) : out;
+}
+
+// ============================================================
+// 拉取行情/K线:script 标签 JSONP,不受 CORS 限制
+// ============================================================
+function loadScript(src, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    const timer = setTimeout(() => { cleanup(); reject(new Error("timeout")); }, timeoutMs);
+    function cleanup() { clearTimeout(timer); script.remove(); }
+    script.onload = () => { cleanup(); resolve(); };
+    script.onerror = () => { cleanup(); reject(new Error("network")); };
+    script.src = src;
+    document.head.appendChild(script);
+  });
+}
+
+// ---- 实时快照(现价/涨跌幅),批量一次拿全部活跃代码 ----
+async function fetchQuotesSina(symbols) {
+  await loadScript(`https://hq.sinajs.cn/list=${symbols.join(",")}&_=${Date.now()}`, 6000);
+  const out = {};
+  symbols.forEach(sym => {
+    const raw = window["hq_str_" + sym];
+    if (!raw || raw.length < 10) return;
+    const f = raw.split(",");
+    out[sym] = {
+      name: f[0], open: parseFloat(f[1]), prevClose: parseFloat(f[2]), current: parseFloat(f[3]),
+      high: parseFloat(f[4]), low: parseFloat(f[5]), volume: parseFloat(f[8]), amount: parseFloat(f[9]),
+      time: (f[30] || "") + " " + (f[31] || ""),
+    };
+  });
+  if (Object.keys(out).length === 0) throw new Error("empty");
+  return out;
+}
+async function fetchQuotesTencent(symbols) {
+  await loadScript(`https://qt.gtimg.cn/q=${symbols.join(",")}&_=${Date.now()}`, 6000);
+  const out = {};
+  symbols.forEach(sym => {
+    const raw = window["v_" + sym];
+    if (!raw || raw.length < 10) return;
+    const f = raw.split("~");
+    out[sym] = {
+      name: f[1], open: parseFloat(f[5]), prevClose: parseFloat(f[4]), current: parseFloat(f[3]),
+      high: parseFloat(f[33]), low: parseFloat(f[34]), volume: parseFloat(f[36]) * 100, amount: parseFloat(f[37]) * 10000,
+      time: f[30] || "",
+    };
+  });
+  if (Object.keys(out).length === 0) throw new Error("empty");
+  return out;
+}
+
+// ---- K线(分钟/日K),新浪主/腾讯备 ----
+async function fetchKlineSina(symbol, scale, datalen) {
+  const varName = `_kl_${symbol.replace(/[^a-z0-9]/gi, "")}_${scale}_${Date.now()}`;
+  const url = `https://quotes.sina.cn/cn/api/jsonp_v2.php/var%20${varName}=/CN_MarketDataService.getKLineData?symbol=${symbol}&scale=${scale}&ma=no&datalen=${datalen}`;
+  await loadScript(url, 8000);
+  const raw = window[varName];
+  try { delete window[varName]; } catch (e) {}
+  if (!Array.isArray(raw) || raw.length === 0) throw new Error("empty");
+  const isDaily = scale === 240;
+  const bars = raw.map(r => ({
+    time: isDaily ? toDateStr(r.day) : parseBeijingTime(r.day),
+    open: parseFloat(r.open), high: parseFloat(r.high), low: parseFloat(r.low), close: parseFloat(r.close),
+    // 接口成交量单位没法在沙盒里核实,保守假设是"手"、统一 ×100 换算成"股",和实时快照(确认是"股")对齐,
+    // 避免活价更新时把最后一根K线的成交量猛地推大 100 倍、触发离谱的假爆量提醒。
+    volume: (parseFloat(r.volume) || 0) * 100,
+  })).filter(b => (isDaily ? !!b.time : isFinite(b.time)) && isFinite(b.close));
+  if (!bars.length) throw new Error("empty");
+  return sortDedupeBars(bars);
+}
+async function fetchKlineTencent(symbol, scale, datalen) {
+  const varName = `_tkl_${symbol.replace(/[^a-z0-9]/gi, "")}_${scale}_${Date.now()}`;
+  const url = scale === 240
+    ? `https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=${symbol},day,,,${datalen},qfq&_var=${varName}`
+    : `https://web.ifzq.gtimg.cn/appstock/app/kline/mkline?param=${symbol},m${scale},,${datalen}&_var=${varName}`;
+  await loadScript(url, 8000);
+  const raw = window[varName];
+  try { delete window[varName]; } catch (e) {}
+  const d = raw && raw.data && raw.data[symbol];
+  const list = d ? (d.day || d.qfqday || d["m" + scale] || []) : [];
+  const isDaily = scale === 240;
+  const bars = list.map(row => ({
+    time: isDaily ? toDateStr(row[0]) : parseBeijingTime(row[0]),
+    open: parseFloat(row[1]), close: parseFloat(row[2]), high: parseFloat(row[3]), low: parseFloat(row[4]),
+    volume: (parseFloat(row[5]) || 0) * 100, // 同上,统一按"手"->"股" ×100
+  })).filter(b => (isDaily ? !!b.time : isFinite(b.time)) && isFinite(b.close));
+  if (!bars.length) throw new Error("empty");
+  return sortDedupeBars(bars);
+}
+async function fetchKline(symbol, scale, datalen) {
+  try { return await fetchKlineSina(symbol, scale, datalen); }
+  catch (e) { return await fetchKlineTencent(symbol, scale, datalen); }
+}
+
+// ============================================================
+// 周K:对日K在浏览器本地按自然周(周一为一周起点,北京时间)聚合
+// ============================================================
+// 日K的 time 现在是 "YYYY-MM-DD" 字符串;算出它所在那一周(周一为起点,北京时间)的周一日期,
+// 同样以 "YYYY-MM-DD" 字符串返回,周K 系列的 time 就用这个,和日K 保持同一种 business-day 格式。
+function weekKeyOf(dateStr) {
+  const sec = parseBeijingTime(dateStr);
+  const d = new Date((sec + 8 * 3600) * 1000);
+  const day = d.getUTCDay();
+  const diffToMonday = (day + 6) % 7;
+  const monday = new Date(d);
+  monday.setUTCDate(d.getUTCDate() - diffToMonday);
+  monday.setUTCHours(0, 0, 0, 0);
+  return beijingDateStrFromSec(Math.floor(monday.getTime() / 1000) - 8 * 3600);
+}
+function resampleWeekly(dailyBars) {
+  const out = [];
+  let cur = null, curKey = null;
+  for (const b of dailyBars) {
+    const key = weekKeyOf(b.time);
+    if (!cur || key !== curKey) {
+      if (cur) out.push(cur);
+      cur = { time: key, open: b.open, high: b.high, low: b.low, close: b.close, volume: b.volume };
+      curKey = key;
+    } else {
+      cur.high = Math.max(cur.high, b.high);
+      cur.low = Math.min(cur.low, b.low);
+      cur.close = b.close;
+      cur.volume += b.volume;
+    }
+  }
+  if (cur) out.push(cur);
+  return out;
+}
+
+// ============================================================
+// K线缓存:key = "symbol|tf(5m/15m/30m/60m/D)",W 直接复用 D 的缓存现算
+// ============================================================
+const klineCache = new Map();
+function cacheKey(symbol, tf) { return symbol + "|" + tf; }
+function evictIfNeeded() {
+  while (klineCache.size > MAX_CACHE_ENTRIES) {
+    const oldest = klineCache.keys().next().value;
+    if (oldest === undefined) break;
+    klineCache.delete(oldest);
+  }
+}
+function storeTfKey(tf) { return tf === "W" ? "D" : tf; }
+
+async function ensureKline(symbol, tf, force) {
+  const key = cacheKey(symbol, storeTfKey(tf));
+  let entry = klineCache.get(key);
+  const now = Date.now();
+  if (entry && !force && (entry.fetching || now - entry.lastFetch < SLOW_REFRESH_MS)) return entry;
+  if (!entry) {
+    entry = { bars: [], lastFetch: 0, fetching: false, error: false };
+    klineCache.set(key, entry);
+    evictIfNeeded();
+  }
+  entry.fetching = true;
+  try {
+    entry.bars = await fetchKline(symbol, SCALE_OF_TF[storeTfKey(tf)], KLINE_DATALEN);
+    entry.lastFetch = Date.now();
+    entry.error = false;
+  } catch (e) {
+    entry.error = true; // 保留上一次成功拉到的 bars,不清空
+  } finally {
+    entry.fetching = false;
+  }
+  renderAffected(symbol, storeTfKey(tf));
+  return entry;
+}
+
+function getRawSeriesForCell(cell) {
+  const entry = klineCache.get(cacheKey(cell.symbol, storeTfKey(cell.tf)));
+  const bars = entry ? entry.bars : [];
+  return cell.tf === "W" ? resampleWeekly(bars) : bars;
+}
+function klineErrorForCell(cell) {
+  const entry = klineCache.get(cacheKey(cell.symbol, storeTfKey(cell.tf)));
+  return !!(entry && entry.error);
+}
+
+function toPercentSeries(bars) {
+  const base = (bars[0] && bars[0].open) || 1;
+  return bars.map(b => ({
+    time: b.time,
+    open: (b.open / base - 1) * 100,
+    high: (b.high / base - 1) * 100,
+    low: (b.low / base - 1) * 100,
+    close: (b.close / base - 1) * 100,
+  }));
+}
+
+// ============================================================
+// 实时报价:批量刷新,推动"当前正在成形的那根K线"。
+// 日K(D):按北京时间日期字符串比较——最后一根就是今天,原地更新 close/high/low,
+//   并且把 volume 整个替换成快照的当日累计成交量(不是加,是替换,快照本来就是累计值);
+//   最后一根还是昨天(服务端还没吐出今天这根,开盘瞬间常见),直接 push 一根新的日K。
+// 分钟K(5m/15m/30m/60m):按时间桶比较——桶没变就原地改 close/high/low;
+//   桶已经翻篇,不再是"跳过等60秒慢速刷新",而是立刻 push 一根新桶的K线(量能先记 0,
+//   60秒内的慢速刷新会用服务端真实值把这根K线整体纠正回来)。
+// 两种情况处理完都过一遍去重+排序+裁剪,防止极端时序下出现重复/乱序时间戳。
+// ============================================================
+const quotes = new Map(); // symbol -> 最近一次成功的报价
+
+function activeSymbols() {
+  return [...new Set(cells.map(c => c.symbol))];
+}
+
+function bucketStartFor(tf, nowSec) {
+  const bucket = TF_SECONDS[tf];
+  return Math.floor(nowSec / bucket) * bucket;
+}
+
+function applyQuoteToKline(symbol, q) {
+  const nowSec = Math.floor(Date.now() / 1000);
+  const symCells = cells.filter(c => c.symbol === symbol);
+  const doneTf = new Set();
+  symCells.forEach(cell => {
+    const tfKey = storeTfKey(cell.tf);
+    if (doneTf.has(tfKey)) return;
+    doneTf.add(tfKey);
+    const entry = klineCache.get(cacheKey(symbol, tfKey));
+    if (!entry || !entry.bars.length) return;
+    let bars = entry.bars;
+    const last = bars[bars.length - 1];
+
+    if (tfKey === "D") {
+      const todayStr = todayBeijingStr();
+      if (last.time === todayStr) {
+        last.close = q.current;
+        last.high = Math.max(last.high, q.current);
+        last.low = Math.min(last.low, q.current);
+        last.volume = q.volume; // 快照的成交量就是"今天累计到现在",直接整个替换
+      } else if (last.time < todayStr) {
+        bars.push({ time: todayStr, open: q.open || q.current, high: q.high || q.current, low: q.low || q.current, close: q.current, volume: q.volume });
+      } else {
+        return; // last.time > todayStr 理论上不会发生(时钟异常之类),保守跳过不动它
+      }
+    } else {
+      const bucket = bucketStartFor(tfKey, nowSec);
+      if (last.time === bucket) {
+        last.close = q.current;
+        last.high = Math.max(last.high, q.current);
+        last.low = Math.min(last.low, q.current);
+      } else if (last.time < bucket) {
+        bars.push({ time: bucket, open: q.current, high: q.current, low: q.current, close: q.current, volume: 0 });
+      } else {
+        return;
+      }
+    }
+    entry.bars = sortDedupeBars(bars);
+  });
+}
+
+async function fastTick() {
+  const symbols = activeSymbols();
+  const statusEl = $("#status");
+  if (symbols.length === 0) {
+    statusEl.textContent = "所有格子都是空的,填入代码开始关注";
+    return;
+  }
+  statusEl.textContent = "刷新中…";
+  let data, source;
+  try { data = await fetchQuotesSina(symbols); source = "新浪"; }
+  catch (e) {
+    try { data = await fetchQuotesTencent(symbols); source = "腾讯"; }
+    catch (e2) {
+      statusEl.textContent = "行情获取失败(新浪、腾讯均无法访问),将按刷新间隔自动重试,已保留上次数据";
+      return;
+    }
+  }
+  Object.entries(data).forEach(([sym, q]) => { quotes.set(sym, q); applyQuoteToKline(sym, q); });
+  statusEl.textContent = `最近更新 ${new Date().toLocaleTimeString("zh-CN")} · 数据源:${source}${isTradingHours() ? "" : "(非交易时段,已降频)"}`;
+  cells.forEach(c => { updateHeader(c); checkAlerts(c); });
+}
+
+// ============================================================
+// 状态
+// ============================================================
+const state = { mode: "multi-symbol", focusSymbol: null, scaleMode: "price", savedSymbols: null, paused: false };
+const cells = [];
+let isSyncing = false;
+
+// ============================================================
+// 持久化
+// ============================================================
+function loadCodes() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(LS_CODES) || "null");
+    if (Array.isArray(saved) && saved.length === N) return saved.map(s => s || "");
+  } catch (e) {}
+  return DEFAULT_CODES.slice();
+}
+function saveCodes() { localStorage.setItem(LS_CODES, JSON.stringify(cells.map(c => c.symbol))); }
+
+// ============================================================
+// DOM 构建
+// ============================================================
+function buildCellDOM(idx, symbol) {
+  const el = document.createElement("div");
+  el.className = "relative flex flex-col rounded-lg border-2 border-slate-700 bg-[#131c2e] overflow-hidden transition-colors duration-300";
+  el.innerHTML = `
+    <div class="flex items-center gap-2 px-2 py-1.5 border-b border-slate-800 bg-black/20 text-xs shrink-0">
+      <input class="sym-input w-20 bg-slate-800 rounded px-1.5 py-1 text-slate-100 outline-none focus:ring-1 focus:ring-blue-500 uppercase" value="${symbol}" spellcheck="false" placeholder="代码">
+      <span class="tf-badge text-[10px] text-slate-500 bg-slate-800 rounded px-1.5 py-0.5"></span>
+      <span class="kline-err hidden text-amber-400 text-[10px]" title="K线刷新失败,已保留上次数据">⚠</span>
+      <span class="price font-mono font-bold text-sm ml-1 text-slate-100">--</span>
+      <span class="chg font-mono text-xs text-slate-400">--</span>
+      <div class="ml-auto flex items-center gap-1">
+        <button class="zoom-btn text-slate-400 hover:text-blue-400 text-xs px-1.5 py-1 rounded hover:bg-slate-800" title="放大单股多周期">⤢</button>
+        <button class="reset-btn text-slate-400 hover:text-blue-400 text-xs px-1.5 py-1 rounded hover:bg-slate-800" title="重置缩放">⟲</button>
+      </div>
+    </div>
+    <div class="chart-host flex-1 min-h-0"></div>`;
+  return el;
+}
+
+function createChartForCell(cell) {
+  const chart = LightweightCharts.createChart(cell.hostEl, {
+    layout: { background: { color: "transparent" }, textColor: "#94a3b8", fontSize: 11 },
+    grid: { vertLines: { color: "#1e293b" }, horzLines: { color: "#1e293b" } },
+    crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+    timeScale: { timeVisible: true, secondsVisible: false, borderColor: "#334155" },
+    rightPriceScale: { borderColor: "#334155" },
+    handleScroll: true, handleScale: true,
+    width: cell.hostEl.clientWidth || 300, height: cell.hostEl.clientHeight || 200,
+  });
+  const candleSeries = chart.addCandlestickSeries({ upColor: UP, downColor: DOWN, borderVisible: false, wickUpColor: UP, wickDownColor: DOWN });
+  candleSeries.priceScale().applyOptions({ scaleMargins: { top: 0.08, bottom: 0.28 } });
+  const volumeSeries = chart.addHistogramSeries({ priceFormat: { type: "volume" }, priceScaleId: "" });
+  volumeSeries.priceScale().applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } });
+
+  chart.subscribeCrosshairMove(param => onCrosshairMove(cell.idx, param));
+
+  if (typeof ResizeObserver !== "undefined") {
+    const ro = new ResizeObserver(() => chart.resize(cell.hostEl.clientWidth, cell.hostEl.clientHeight));
+    ro.observe(cell.hostEl);
+    cell.ro = ro;
+  }
+
+  cell.chart = chart; cell.candleSeries = candleSeries; cell.volumeSeries = volumeSeries;
+}
+
+function renderAffected(symbol, tfKey) {
+  cells.forEach(c => { if (c.symbol === symbol && storeTfKey(c.tf) === tfKey) rebuildCellChart(c); });
+}
+
+function rebuildCellChart(cell) {
+  const raw = getRawSeriesForCell(cell);
+  const display = state.scaleMode === "percent" ? toPercentSeries(raw) : raw;
+  cell.candleSeries.applyOptions({
+    priceFormat: state.scaleMode === "percent"
+      ? { type: "custom", formatter: v => (v >= 0 ? "+" : "") + v.toFixed(2) + "%" }
+      : { type: "price", precision: 2, minMove: 0.01 },
+  });
+  cell.candleSeries.setData(display);
+  cell.volumeSeries.setData(raw.map(b => ({ time: b.time, value: b.volume, color: b.close >= b.open ? "rgba(34,197,94,.5)" : "rgba(239,68,68,.5)" })));
+  cell.chart.timeScale().fitContent();
+  cell.tfBadge.textContent = TF_LABEL[cell.tf];
+  cell.klineErrEl.classList.toggle("hidden", !klineErrorForCell(cell));
+  updateHeader(cell);
+  checkAlerts(cell);
+}
+
+function updateHeader(cell) {
+  const q = quotes.get(cell.symbol);
+  let price, chgPct, name;
+  if (q && isFinite(q.current) && q.prevClose) {
+    price = q.current;
+    chgPct = (q.current / q.prevClose - 1) * 100;
+    name = q.name;
+  } else {
+    const raw = getRawSeriesForCell(cell);
+    if (!raw.length) { cell.priceEl.textContent = "--"; cell.chgEl.textContent = "--"; return; }
+    const last = raw[raw.length - 1];
+    price = last.close;
+    chgPct = raw[0].open ? (last.close / raw[0].open - 1) * 100 : 0;
+    name = cell.symbol;
+  }
+  const up = chgPct >= 0;
+  cell.priceEl.textContent = fmtPrice(price);
+  cell.chgEl.textContent = (up ? "+" : "") + chgPct.toFixed(2) + "%";
+  cell.priceEl.className = "price font-mono font-bold text-sm ml-1 " + (up ? "text-green-400" : "text-red-400");
+  cell.chgEl.className = "chg font-mono text-xs " + (up ? "text-green-400" : "text-red-400");
+  cell.priceEl.title = name || "";
+}
+
+function flashCell(cell, cls) {
+  cell.el.classList.remove("flash-gold", "flash-up", "flash-down");
+  void cell.el.offsetWidth;
+  cell.el.classList.add(cls);
+  clearTimeout(cell.flashTimer);
+  cell.flashTimer = setTimeout(() => cell.el.classList.remove(cls), 3000);
+}
+
+function checkAlerts(cell) {
+  const raw = getRawSeriesForCell(cell);
+  if (raw.length < 21) return;
+  const last = raw[raw.length - 1];
+  const prev20 = raw.slice(-21, -1);
+  const avgVol = prev20.reduce((s, b) => s + b.volume, 0) / prev20.length;
+  let kind = null;
+  if (avgVol > 0 && last.volume >= avgVol * 2.5) {
+    kind = "flash-gold";
+  } else {
+    const prevBar = raw[raw.length - 2];
+    if (prevBar && prevBar.close) {
+      const movePct = Math.abs(last.close / prevBar.close - 1) * 100;
+      if (movePct >= 1.5) kind = last.close >= prevBar.close ? "flash-up" : "flash-down";
+    }
+  }
+  if (!kind) return;
+  // 按"K线时间+异动类型"去重,避免这根K线接下来持续异常时被反复重新点亮、一直不灭
+  if (cell.lastAlertBarTime === last.time && cell.lastAlertKind === kind) return;
+  cell.lastAlertBarTime = last.time;
+  cell.lastAlertKind = kind;
+  flashCell(cell, kind);
+}
+
+// ============================================================
+// 十字光标全屏联动(isSyncing 标记位防死循环)
+// ============================================================
+function onCrosshairMove(idx, param) {
+  if (isSyncing) return;
+  if (state.mode !== "multi-symbol") return; // 多周期抽屉模式下各图周期不同,不做联动
+  isSyncing = true;
+  try {
+    cells.forEach((c, i) => {
+      if (i === idx || !c.chart) return;
+      if (param.time === undefined || !param.point) {
+        c.chart.clearCrosshairPosition();
+      } else {
+        c.chart.setCrosshairPosition(0, param.time, c.candleSeries);
+      }
+    });
+  } finally {
+    isSyncing = false;
+  }
+}
+
+// ============================================================
+// 单股多周期抽屉模式:5分/15分/30分/60分/日K/周K
+// ============================================================
+function enterMultiTimeframe(symbol) {
+  if (state.mode === "multi-symbol") state.savedSymbols = cells.map(c => c.symbol);
+  state.mode = "multi-tf";
+  state.focusSymbol = symbol;
+  cells.forEach((cell, i) => {
+    cell.symbol = symbol;
+    cell.tf = TIMEFRAMES[i];
+    cell.symInput.value = symbol;
+    cell.symInput.readOnly = true;
+    rebuildCellChart(cell);
+    ensureKline(symbol, cell.tf, true);
+  });
+  $("#backToGridBtn").classList.remove("hidden");
+  $("#focusLabel").textContent = `多周期模式:${symbol}`;
+}
+
+function exitMultiTimeframe() {
+  state.mode = "multi-symbol";
+  const saved = state.savedSymbols || DEFAULT_CODES.map(normalizeCode);
+  cells.forEach((cell, i) => {
+    cell.symbol = saved[i];
+    cell.tf = DEFAULT_TF;
+    cell.symInput.value = cell.symbol;
+    cell.symInput.readOnly = false;
+    rebuildCellChart(cell);
+    ensureKline(cell.symbol, cell.tf, true);
+  });
+  $("#backToGridBtn").classList.add("hidden");
+  $("#focusLabel").textContent = "";
+  saveCodes();
+}
+
+// ============================================================
+// 价格 / 百分比 切换
+// ============================================================
+function applyScaleButtonStyles() {
+  document.querySelectorAll(".scale-btn").forEach(b => {
+    const on = b.dataset.mode === state.scaleMode;
+    b.classList.toggle("bg-blue-600", on);
+    b.classList.toggle("text-white", on);
+  });
+}
+function setScaleMode(mode) {
+  state.scaleMode = mode;
+  applyScaleButtonStyles();
+  cells.forEach(rebuildCellChart);
+}
+
+// ============================================================
+// 事件绑定
+// ============================================================
+function wireCellEvents(cell) {
+  cell.symInput.addEventListener("keydown", e => {
+    if (e.key !== "Enter" || state.mode !== "multi-symbol") return;
+    const sym = normalizeCode(cell.symInput.value);
+    if (!sym) { cell.symInput.value = cell.symbol; return; }
+    cell.symbol = sym;
+    cell.symInput.value = sym;
+    saveCodes();
+    rebuildCellChart(cell);
+    ensureKline(sym, cell.tf, true);
+    fastTick();
+    cell.symInput.blur();
+  });
+  cell.zoomBtn.addEventListener("click", () => enterMultiTimeframe(cell.symbol));
+  cell.resetBtn.addEventListener("click", () => cell.chart && cell.chart.timeScale().fitContent());
+}
+
+// ============================================================
+// 定时器:快(实时报价) + 慢(K线权威刷新,交给 ensureKline 内部判断是否真的要发请求)
+// ============================================================
+let fastTimer = null;
+function fastIntervalForNow(baseMs) {
+  return isTradingHours() ? baseMs : 300000; // 非交易时段固定降频到 5 分钟一次
+}
+function scheduleFast() {
+  clearTimeout(fastTimer);
+  if (state.paused) return;
+  const baseMs = parseInt($("#interval").value, 10) || 5000;
+  fastTimer = setTimeout(async () => { await fastTick(); scheduleFast(); }, fastIntervalForNow(baseMs));
+}
+
+let slowTimer = null;
+function scheduleSlow() {
+  slowTimer = setInterval(() => {
+    cells.forEach(c => ensureKline(c.symbol, c.tf, false));
+  }, 10000); // 每 10 秒扫一遍,真正发不发请求由 ensureKline 内部的 60 秒节流决定
+}
+
+// ============================================================
+// 初始化
+// ============================================================
+function init() {
+  const codes = loadCodes();
+  const board = $("#board");
+  codes.forEach((raw, i) => {
+    const sym = normalizeCode(raw) || DEFAULT_CODES[i];
+    const el = buildCellDOM(i, sym);
+    board.appendChild(el);
+    const cell = {
+      idx: i, el, symbol: sym, tf: DEFAULT_TF,
+      hostEl: $(".chart-host", el),
+      symInput: $(".sym-input", el),
+      priceEl: $(".price", el),
+      chgEl: $(".chg", el),
+      tfBadge: $(".tf-badge", el),
+      klineErrEl: $(".kline-err", el),
+      zoomBtn: $(".zoom-btn", el),
+      resetBtn: $(".reset-btn", el),
+    };
+    cells.push(cell);
+    wireCellEvents(cell);
+    createChartForCell(cell);
+    rebuildCellChart(cell);
+    ensureKline(sym, cell.tf, true);
+  });
+
+  document.querySelectorAll(".scale-btn").forEach(b => b.addEventListener("click", () => setScaleMode(b.dataset.mode)));
+  applyScaleButtonStyles();
+  $("#backToGridBtn").addEventListener("click", exitMultiTimeframe);
+
+  $("#interval").value = localStorage.getItem(LS_INTERVAL) || "5000";
+  $("#footInterval").textContent = String(parseInt($("#interval").value, 10) / 1000);
+  $("#interval").addEventListener("change", () => {
+    localStorage.setItem(LS_INTERVAL, $("#interval").value);
+    $("#footInterval").textContent = String(parseInt($("#interval").value, 10) / 1000);
+    scheduleFast();
+  });
+  $("#pauseBtn").addEventListener("click", () => {
+    state.paused = !state.paused;
+    $("#pauseBtn").textContent = state.paused ? "继续自动刷新" : "暂停自动刷新";
+    $("#pauseBtn").classList.toggle("bg-blue-600", state.paused);
+    scheduleFast();
+  });
+  $("#refreshBtn").addEventListener("click", () => {
+    fastTick();
+    cells.forEach(c => ensureKline(c.symbol, c.tf, true));
+    scheduleFast();
+  });
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) {
+      clearTimeout(fastTimer);
+    } else {
+      fastTick();
+      cells.forEach(c => ensureKline(c.symbol, c.tf, false)); // 内部节流,挂机很久的话这次会因为超过60秒而真正刷新
+      scheduleFast();
+    }
+  });
+
+  fastTick();
+  scheduleFast();
+  scheduleSlow();
+
+  setInterval(() => { $("#clock").textContent = new Date().toLocaleTimeString("zh-CN"); }, 1000);
+  $("#clock").textContent = new Date().toLocaleTimeString("zh-CN");
+}
+
+// 对外接口:预留给未来手动/外部数据源按 (symbol, 周期, 单根K线) 推送,不是主路径。
+// tf 取值同 TIMEFRAMES;bar: { time, open, high, low, close, volume } ——
+// tf 为 5m/15m/30m/60m 时 time 是秒级 unix 时间戳(数字),tf 为 D/W 时 time 是 "YYYY-MM-DD" 字符串。
+window.updateChart = function (symbol, tf, bar) {
+  symbol = String(symbol).toUpperCase();
+  const tfKey = storeTfKey(tf || DEFAULT_TF);
+  const key = cacheKey(symbol, tfKey);
+  let entry = klineCache.get(key);
+  if (!entry) { entry = { bars: [], lastFetch: Date.now(), fetching: false, error: false }; klineCache.set(key, entry); evictIfNeeded(); }
+  entry.bars = sortDedupeBars([...entry.bars, bar]);
+  renderAffected(symbol, tfKey);
+};
+
+if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
+else init();
+
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,419 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>仓位与止损风控小工具</title>
+<style>
+:root {
+  color-scheme: light dark;
+  --page: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --sec: #52514e;
+  --mut: #898781; --grid: #e1e0d9; --axis: #c3c2b7;
+  --danger: #e34948; --safe: #2a78d6; --warn: #c98a1f; --neutral: #f0efec;
+  --line: #2a78d6; --ring: rgba(11,11,11,0.10);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --page: #0d0d0d; --surface: #1a1a19; --ink: #ffffff; --sec: #c3c2b7;
+    --grid: #2c2c2a; --axis: #383835;
+    --danger: #e66767; --safe: #3987e5; --warn: #d9a441; --neutral: #383835;
+    --line: #3987e5; --ring: rgba(255,255,255,0.10);
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--ink);
+  font-family: system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; }
+.wrap { max-width: 760px; margin: 0 auto; padding: 24px 16px 48px; }
+.topnav { font-size: 13px; margin-bottom: 10px; }
+.topnav a { color: var(--safe); text-decoration: none; }
+h1 { font-size: 22px; margin: 0 0 4px; }
+.sub { color: var(--mut); font-size: 13px; margin-bottom: 18px; line-height: 1.6; }
+.tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+.tabs button { flex: 1; border: 1px solid var(--ring); background: var(--surface); color: var(--sec);
+  border-radius: 8px; padding: 10px 12px; font-size: 14px; cursor: pointer; }
+.tabs button.on { color: var(--ink); font-weight: 600; border-color: var(--axis); background: var(--neutral); }
+.card { background: var(--surface); border: 1px solid var(--ring); border-radius: 10px;
+  padding: 16px 18px; margin-bottom: 16px; }
+.card h2 { font-size: 15px; margin: 0 0 10px; }
+.row { display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+.field { flex: 1; min-width: 130px; }
+.field label { display: block; font-size: 12px; color: var(--mut); margin-bottom: 4px; }
+.field input, .field select { width: 100%; padding: 8px 9px; border-radius: 7px; border: 1px solid var(--ring);
+  background: var(--page); color: var(--ink); font-size: 14px; }
+.seg { display: flex; border: 1px solid var(--ring); border-radius: 7px; overflow: hidden; }
+.seg button { flex: 1; border: none; background: var(--page); color: var(--sec); padding: 8px 6px;
+  font-size: 13px; cursor: pointer; border-right: 1px solid var(--ring); }
+.seg button:last-child { border-right: none; }
+.seg button.on { background: var(--neutral); color: var(--ink); font-weight: 600; }
+.check { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--sec); margin-bottom: 10px; }
+.result { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 4px; }
+@media (max-width: 480px) { .result { grid-template-columns: 1fr; } }
+.stat { background: var(--page); border: 1px solid var(--ring); border-radius: 8px; padding: 10px 12px; }
+.stat .k { font-size: 12px; color: var(--mut); }
+.stat .v { font-size: 18px; font-weight: 700; margin-top: 2px; }
+.stat .v.danger { color: var(--danger); }
+.stat .v.safe { color: var(--safe); }
+.note { font-size: 12.5px; color: var(--mut); margin-top: 10px; line-height: 1.6; }
+.note.warn { color: var(--warn); }
+.tblwrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 560px; }
+th, td { padding: 7px 8px; text-align: right; border-bottom: 1px solid var(--ring); white-space: nowrap; }
+th:first-child, td:first-child { text-align: left; }
+td input { width: 84px; padding: 5px 6px; border-radius: 6px; border: 1px solid var(--ring);
+  background: var(--page); color: var(--ink); font-size: 13px; text-align: right; }
+td:first-child input { width: 100%; text-align: left; }
+tr.danger td { color: var(--danger); }
+tr.warn td { color: var(--warn); }
+.tag { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 600; }
+.tag.danger { background: color-mix(in srgb, var(--danger) 18%, transparent); color: var(--danger); }
+.tag.warn { background: color-mix(in srgb, var(--warn) 18%, transparent); color: var(--warn); }
+.tag.safe { background: color-mix(in srgb, var(--safe) 14%, transparent); color: var(--safe); }
+.delbtn { border: none; background: transparent; color: var(--mut); cursor: pointer; font-size: 15px; padding: 2px 6px; }
+.delbtn:hover { color: var(--danger); }
+.addrow { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+.addrow input { flex: 1; min-width: 90px; padding: 8px 9px; border-radius: 7px; border: 1px solid var(--ring);
+  background: var(--page); color: var(--ink); font-size: 13px; }
+.addrow button { border: 1px solid var(--axis); background: var(--neutral); color: var(--ink);
+  border-radius: 7px; padding: 8px 14px; font-size: 13px; cursor: pointer; font-weight: 600; }
+.summary { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 14px; }
+.summary .stat { flex: 1; min-width: 140px; }
+.empty { color: var(--mut); font-size: 13px; padding: 12px 0; }
+.foot { color: var(--mut); font-size: 12px; line-height: 1.7; }
+[hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topnav"><a href="index.html">← 返回资金动向看板</a></div>
+  <h1>仓位与止损风控小工具</h1>
+  <div class="sub">核心目标:单笔交易的最大亏损控制在总资金的一定比例(默认 3%)以内。
+    所有数据仅保存在你当前浏览器的本地存储(localStorage),不会上传或同步。</div>
+
+  <div class="row">
+    <div class="field" style="max-width:220px">
+      <label>风险阈值(单笔最大亏损占总资金)</label>
+      <input type="number" id="riskPct" step="0.1" min="0.1" value="3">
+    </div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab on" data-tab="calc">仓位/止损计算器</button>
+    <button class="tab" data-tab="watch">持仓监控</button>
+  </div>
+
+  <section id="tab-calc">
+    <div class="card">
+      <h2>1. 输入</h2>
+      <div class="row">
+        <div class="field">
+          <label>总资金(元)</label>
+          <input type="number" id="capital" min="0" step="100" value="100000">
+        </div>
+        <div class="field">
+          <label>买入价(元)</label>
+          <input type="number" id="entryPrice" min="0" step="0.01" value="10.00">
+        </div>
+      </div>
+      <div class="field" style="margin-bottom:10px">
+        <label>止损设定方式</label>
+        <div class="seg" id="stopMode">
+          <button class="on" data-mode="pct">按跌幅百分比</button>
+          <button data-mode="price">按具体止损价</button>
+        </div>
+      </div>
+      <div class="row" id="pctRow">
+        <div class="field">
+          <label>止损跌幅(%)</label>
+          <input type="number" id="stopPct" min="0.1" step="0.1" value="3">
+        </div>
+      </div>
+      <div class="row" id="priceRow" hidden>
+        <div class="field">
+          <label>止损价(元)</label>
+          <input type="number" id="stopPrice" min="0" step="0.01" value="9.70">
+        </div>
+      </div>
+      <div class="row">
+        <div class="field" style="max-width:200px">
+          <label>下单单位(1手=N股,0=不取整)</label>
+          <input type="number" id="lotSize" min="0" step="1" value="100">
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>2. 建议结果</h2>
+      <div id="calcResult" class="result"></div>
+      <div id="calcNote" class="note"></div>
+    </div>
+  </section>
+
+  <section id="tab-watch" hidden>
+    <div class="card">
+      <h2>持仓一览</h2>
+      <div class="summary" id="watchSummary"></div>
+      <div class="tblwrap">
+        <table>
+          <thead>
+            <tr>
+              <th>代码/名称</th><th>成本价</th><th>现价</th><th>数量</th>
+              <th>浮动盈亏</th><th>浮动比例</th><th>状态</th><th>杠杆(买入%/余额%)</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="watchBody"></tbody>
+        </table>
+      </div>
+      <div id="watchEmpty" class="empty" hidden>还没有持仓记录,在下方添加一条。</div>
+      <div class="addrow">
+        <input id="addName" placeholder="代码/名称">
+        <input id="addCost" type="number" step="0.01" placeholder="成本价">
+        <input id="addPrice" type="number" step="0.01" placeholder="现价">
+        <input id="addQty" type="number" step="1" placeholder="数量">
+        <button id="addBtn">添加</button>
+      </div>
+      <div class="note">现价可随时在表格中直接修改,浮动盈亏与状态会实时重新计算;
+        浮亏达到或超过上方设定的风险阈值时标红,提示应考虑止损。<br>
+        "代码/名称"里包含6位数字代码时,会自动匹配当日个股杠杆数据(融资买入占成交额% / 融资余额占流通市值%);
+        余额占比超过预警阈值同样标红。该数据每交易日更新一次,来自本站"资金动向看板"的杠杆监测模块,
+        需联网加载,离线打开本页(file://)时这一列会显示"—"。<span id="levDate"></span></div>
+    </div>
+  </section>
+
+  <div class="card foot">
+    仓位/止损计算与持仓浮动盈亏均为本地算术计算,不获取实时行情;持仓监控里的"杠杆"一列会联网加载
+    本站每日更新的个股杠杆快照(只读,不上传你的任何持仓数据)。以上均不提供任何交易建议,也不构成
+    投资建议。风险自负,请结合自己的实际情况使用。
+  </div>
+</div>
+<script>
+const LS_SHARED = "riskTool.riskPct";
+const LS_CALC = "riskTool.calc";
+const LS_WATCH = "riskTool.watchlist";
+
+const $ = id => document.getElementById(id);
+const fmt = (n, d=2) => Number(n).toLocaleString("zh-CN", { minimumFractionDigits: d, maximumFractionDigits: d });
+const fmtPct = (n, d=2) => (n>0?"+":"") + Number(n).toFixed(d) + "%";
+
+// ---- 个股杠杆快照(只读,联网加载;离线/加载失败时静默降级为"—") ----
+let LEVERAGE = { alert_pct: 8, stocks: {} };
+fetch("leverage_data.json").then(r => r.json()).then(d => {
+  LEVERAGE = d;
+  if (d.date) $("levDate").textContent = ` 当前杠杆数据日期:${d.date}(两融数据为T+1披露)。`;
+  renderWatch();
+}).catch(() => {});
+const extractCode = s => { const m = String(s || "").match(/\d{6}/); return m ? m[0] : null; };
+
+// ---- 顶部风险阈值(两个 tab 共用) ----
+const riskPctEl = $("riskPct");
+riskPctEl.value = localStorage.getItem(LS_SHARED) || "3";
+riskPctEl.addEventListener("input", () => {
+  localStorage.setItem(LS_SHARED, riskPctEl.value);
+  syncStopPctDefault();
+  renderCalc();
+  renderWatch();
+});
+
+// ---- Tab 切换 ----
+document.querySelectorAll(".tabs .tab").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".tabs .tab").forEach(b => b.classList.toggle("on", b === btn));
+    $("tab-calc").hidden = btn.dataset.tab !== "calc";
+    $("tab-watch").hidden = btn.dataset.tab !== "watch";
+  });
+});
+
+// ---- 计算器 ----
+const calcIds = ["capital", "entryPrice", "stopPct", "stopPrice", "lotSize"];
+let stopMode = "pct";
+
+function loadCalcInputs() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(LS_CALC) || "{}");
+    calcIds.forEach(id => { if (saved[id] !== undefined) $(id).value = saved[id]; });
+    if (saved.stopMode) stopMode = saved.stopMode;
+  } catch (e) {}
+}
+function saveCalcInputs() {
+  const data = {}; calcIds.forEach(id => data[id] = $(id).value);
+  data.stopMode = stopMode;
+  localStorage.setItem(LS_CALC, JSON.stringify(data));
+}
+function syncStopPctDefault() {
+  // 首次没有手动改过止损百分比时,跟随风险阈值给个合理默认值(仅在为空/初始时生效,不覆盖用户已输入的值)
+}
+
+$("stopMode").addEventListener("click", ev => {
+  const b = ev.target.closest("button"); if (!b) return;
+  stopMode = b.dataset.mode;
+  document.querySelectorAll("#stopMode button").forEach(x => x.classList.toggle("on", x === b));
+  $("pctRow").hidden = stopMode !== "pct";
+  $("priceRow").hidden = stopMode !== "price";
+  saveCalcInputs(); renderCalc();
+});
+calcIds.forEach(id => $(id).addEventListener("input", () => { saveCalcInputs(); renderCalc(); }));
+
+function renderCalc() {
+  const capital = parseFloat($("capital").value) || 0;
+  const entry = parseFloat($("entryPrice").value) || 0;
+  const riskPct = parseFloat(riskPctEl.value) || 0;
+  const lot = Math.max(0, parseInt($("lotSize").value) || 0);
+  let stopPrice, perShareRisk;
+  if (stopMode === "price") {
+    stopPrice = parseFloat($("stopPrice").value) || 0;
+    perShareRisk = entry - stopPrice;
+  } else {
+    const stopPct = parseFloat($("stopPct").value) || 0;
+    perShareRisk = entry * stopPct / 100;
+    stopPrice = entry - perShareRisk;
+  }
+
+  const box = $("calcResult"), note = $("calcNote");
+  box.innerHTML = ""; note.textContent = ""; note.className = "note";
+
+  if (capital <= 0 || entry <= 0) {
+    note.textContent = "请输入有效的总资金与买入价。";
+    return;
+  }
+  if (perShareRisk <= 0) {
+    note.textContent = "止损价需要低于买入价(或止损跌幅需大于 0),否则无法计算仓位。";
+    return;
+  }
+
+  const maxLossAmount = capital * riskPct / 100;
+  // 先按 6 位小数四舍五入抹掉浮点误差,再向下取整,避免 10-9.7 之类的浮点噪声导致少算一手
+  const rawShares = Math.round((maxLossAmount / perShareRisk) * 1e6) / 1e6;
+  let shares = lot > 0 ? Math.floor(rawShares / lot) * lot
+                       : Math.floor(rawShares);
+  const stat = (k, v, cls="") => {
+    const d = document.createElement("div"); d.className = "stat";
+    d.innerHTML = `<div class="k">${k}</div><div class="v ${cls}">${v}</div>`;
+    box.appendChild(d);
+  };
+
+  if (shares <= 0) {
+    stat("建议买入数量", "0 股");
+    note.className = "note warn";
+    note.textContent = lot > 0
+      ? `以当前风险阈值(${riskPct}%)和止损幅度,连一手(${lot}股)都买不起 —— 说明这笔止损设置对你的资金量来说太宽松了,建议缩小止损幅度或降低仓位另做打算。`
+      : "计算出的股数为 0,说明止损幅度相对资金量过大。";
+    return;
+  }
+
+  const positionValue = shares * entry;
+  const positionPct = positionValue / capital * 100;
+  const actualMaxLoss = shares * perShareRisk;
+  const actualLossPct = actualMaxLoss / capital * 100;
+
+  stat("建议买入数量", `${fmt(shares,0)} 股` + (lot>0 ? ` (${(shares/lot).toFixed(shares%lot===0?0:2)} 手)` : ""));
+  stat("建仓金额", `¥${fmt(positionValue)}`, "");
+  stat("止损价", `¥${fmt(stopPrice)}`);
+  stat("占总资金比例", `${fmt(positionPct)}%`, positionPct > 100 ? "danger" : "");
+  stat("触发止损时最大亏损", `¥${fmt(actualMaxLoss)}`, "danger");
+  stat("实际亏损占总资金", `${fmt(actualLossPct)}%`, actualLossPct > riskPct + 0.01 ? "danger" : "safe");
+
+  if (positionValue > capital) {
+    note.className = "note warn";
+    note.textContent = `建仓金额超过了总资金,说明止损幅度太窄导致按风险阈值算出的股数偏多,请检查输入或适当放宽止损幅度。`;
+  } else {
+    note.textContent = `已按“取整到${lot>0?lot+"股一手":"整股"}”向下取整,实际最大亏损比例(${fmt(actualLossPct)}%)不会超过设定的风险阈值(${riskPct}%)。`;
+  }
+}
+
+// ---- 持仓监控 ----
+function loadWatch() {
+  try { return JSON.parse(localStorage.getItem(LS_WATCH) || "[]"); } catch (e) { return []; }
+}
+function saveWatch(list) { localStorage.setItem(LS_WATCH, JSON.stringify(list)); }
+
+function renderWatch() {
+  const riskPct = parseFloat(riskPctEl.value) || 3;
+  const list = loadWatch();
+  const body = $("watchBody"); body.innerHTML = "";
+  $("watchEmpty").hidden = list.length > 0;
+
+  let totalCost = 0, totalValue = 0, alertCount = 0;
+
+  list.forEach((item, idx) => {
+    const cost = Number(item.cost) || 0, price = Number(item.price) || 0, qty = Number(item.qty) || 0;
+    const pnl = (price - cost) * qty;
+    const pnlPct = cost > 0 ? (price - cost) / cost * 100 : 0;
+    totalCost += cost * qty; totalValue += price * qty;
+
+    let cls = "", tag = `<span class="tag safe">正常</span>`;
+    if (pnlPct <= -riskPct) { cls = "danger"; tag = `<span class="tag danger">建议止损</span>`; alertCount++; }
+    else if (pnlPct <= -riskPct * 0.7) { cls = "warn"; tag = `<span class="tag warn">接近止损</span>`; }
+
+    const code = extractCode(item.name);
+    const lev = code ? LEVERAGE.stocks[code] : null;
+    let levCell = "—";
+    if (lev) {
+      const levAlert = lev.balance_ratio !== null && lev.balance_ratio >= LEVERAGE.alert_pct;
+      levCell = `<span${levAlert ? ' style="color:var(--danger);font-weight:600"' : ""}>`
+        + `${lev.buy_ratio ?? "—"}% / ${lev.balance_ratio ?? "—"}%</span>`;
+    } else if (code) {
+      levCell = `<span style="color:var(--mut)">未上榜</span>`;
+    }
+
+    const tr = document.createElement("tr"); tr.className = cls;
+    tr.innerHTML = `
+      <td><input data-f="name" value="${(item.name||"").replace(/"/g,'&quot;')}"></td>
+      <td><input data-f="cost" type="number" step="0.01" value="${item.cost ?? ""}"></td>
+      <td><input data-f="price" type="number" step="0.01" value="${item.price ?? ""}"></td>
+      <td><input data-f="qty" type="number" step="1" value="${item.qty ?? ""}"></td>
+      <td>${pnl>=0?"+":""}${fmt(pnl)}</td>
+      <td>${fmtPct(pnlPct)}</td>
+      <td>${tag}</td>
+      <td>${levCell}</td>
+      <td><button class="delbtn" data-del="${idx}" title="删除">✕</button></td>`;
+    body.appendChild(tr);
+  });
+
+  body.querySelectorAll("input").forEach(inp => {
+    inp.addEventListener("input", () => {
+      const tr = inp.closest("tr");
+      const idx = [...body.children].indexOf(tr);
+      const l = loadWatch();
+      l[idx][inp.dataset.f] = inp.value;
+      saveWatch(l);
+      renderWatch();
+    });
+  });
+  body.querySelectorAll("[data-del]").forEach(b => {
+    b.addEventListener("click", () => {
+      const l = loadWatch(); l.splice(+b.dataset.del, 1); saveWatch(l); renderWatch();
+    });
+  });
+
+  const totalPnl = totalValue - totalCost;
+  const totalPnlPct = totalCost > 0 ? totalPnl / totalCost * 100 : 0;
+  const sum = $("watchSummary"); sum.innerHTML = "";
+  const stat = (k, v, cls="") => {
+    const d = document.createElement("div"); d.className = "stat";
+    d.innerHTML = `<div class="k">${k}</div><div class="v ${cls}">${v}</div>`;
+    sum.appendChild(d);
+  };
+  stat("持仓总市值", `¥${fmt(totalValue)}`);
+  stat("总浮动盈亏", `${totalPnl>=0?"+":""}¥${fmt(totalPnl)} (${fmtPct(totalPnlPct)})`, totalPnl<0?"danger":"safe");
+  stat("触发止损提醒", `${alertCount} 只`, alertCount>0?"danger":"safe");
+}
+
+$("addBtn").addEventListener("click", () => {
+  const name = $("addName").value.trim();
+  const cost = $("addCost").value, price = $("addPrice").value, qty = $("addQty").value;
+  if (!name || !cost || !qty) return;
+  const l = loadWatch();
+  l.push({ name, cost, price: price || cost, qty });
+  saveWatch(l);
+  $("addName").value = ""; $("addCost").value = ""; $("addPrice").value = ""; $("addQty").value = "";
+  renderWatch();
+});
+
+loadCalcInputs();
+document.querySelectorAll("#stopMode button").forEach(b => b.classList.toggle("on", b.dataset.mode === stopMode));
+$("pctRow").hidden = stopMode !== "pct";
+$("priceRow").hidden = stopMode !== "price";
+renderCalc();
+renderWatch();
+</script>
+</body>
+</html>
