@@ -55,7 +55,10 @@
 
 <div class="mx-1 mb-2 mt-1 rounded-lg border border-slate-700 bg-[#111827] px-4 py-3 text-[11px] leading-relaxed text-slate-400 shrink-0">
   代码填法:6 位数字自动判断市场(6 开头=沪市,0/3 开头=深市,4/8 开头=北交所);指数请带前缀,如 sh000001(上证指数)、sz399001(深证成指)、sz399006(创业板指)。
-  现价/涨跌幅每 <span id="footInterval">5</span> 秒随实时报价刷新一次(非交易时段自动降频);K 线每 60 秒(或切代码/切周期时立即)向数据源整体刷新一次,成交量/爆量判定以这次刷新为准,期间不会跟着秒级报价实时变。
+  六宫格主视图默认日K,现价/涨跌幅每 <span id="footInterval">5</span> 秒随实时报价刷新一次,同步推动最新一根K线:
+  今天的日K还没走完就原地更新收盘价/最高/最低/成交量,服务端还没吐出今天这根就先补一根;K 线本身(含历史)每 60 秒
+  (或切代码/切周期时立即)向数据源整体刷新一次做权威纠正。周一至周五 9:15(含开盘集合竞价)-11:30、13:00-15:00
+  按你设的间隔轮询,非交易时段自动降频到 5 分钟一次。
   单股多周期(点格子右上角"⤢")固定为 5分/15分/30分/60分/日K/周K——A 股没有现成的 1 分钟或 4 小时 K 线公开接口,周K 由日K 在浏览器本地按自然周聚合而成,不是单独请求的。
   行情与 K 线均来自新浪财经(主)/腾讯财经(备)的公开接口,浏览器直接请求,不经过本站服务器,可能有延迟;两家都请求不到时格子会保留上一次数据并提示"获取失败",自动按间隔重试。
   仅供参考,不构成任何投资建议。
@@ -75,7 +78,7 @@ const TIMEFRAMES = ["5m", "15m", "30m", "60m", "D", "W"];
 const TF_LABEL = { "5m": "5分", "15m": "15分", "30m": "30分", "60m": "60分", "D": "日K", "W": "周K" };
 const SCALE_OF_TF = { "5m": 5, "15m": 15, "30m": 30, "60m": 60, "D": 240 };
 const TF_SECONDS = { "5m": 300, "15m": 900, "30m": 1800, "60m": 3600 };
-const DEFAULT_TF = "5m";       // 六宫格主视图固定周期
+const DEFAULT_TF = "D";        // 六宫格主视图固定周期(日K,更贴合盯盘+爆量预警的默认视角)
 const KLINE_DATALEN = 500;     // 单次拉取的K线根数上限(接口本身最多约1023)
 const SLOW_REFRESH_MS = 60000; // K线权威数据的最小刷新间隔
 const MAX_CACHE_ENTRIES = 60;  // klineCache 的粗略上限,长期挂机、来回换代码时防止无限增长
@@ -114,21 +117,41 @@ function parseBeijingTime(s) {
   const Y = +m[1], Mo = +m[2], D = +m[3], H = +(m[4] || 0), Mi = +(m[5] || 0), S = +(m[6] || 0);
   return Math.floor(Date.UTC(Y, Mo - 1, D, H, Mi, S) / 1000) - 8 * 3600;
 }
-function beijingDateStr(unixSec) {
+function pad2(n) { return String(n).padStart(2, "0"); }
+// 秒级 unix 时间戳 -> 北京时间的 "YYYY-MM-DD"。日K/周K 在 Lightweight Charts 里用这种
+// business-day 字符串存,图表横轴才会按"交易日"均匀排列、周末不留空档;分钟K继续用数字时间戳。
+function beijingDateStrFromSec(unixSec) {
   const d = new Date((unixSec + 8 * 3600) * 1000);
-  return `${d.getUTCFullYear()}-${d.getUTCMonth()}-${d.getUTCDate()}`;
+  return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}`;
+}
+// 把接口返回的任意日期/日期时间字符串,统一成北京时间的 "YYYY-MM-DD"
+function toDateStr(s) {
+  const sec = parseBeijingTime(s);
+  return isFinite(sec) ? beijingDateStrFromSec(sec) : null;
 }
 function nowBeijing() {
   return new Date(Date.now() + 8 * 3600 * 1000);
 }
-// A股交易时段判断(周一至周五 9:30-11:30 / 13:00-15:00,北京时间);不含节假日休市表,
-// 节假日会被误判成"该交易"从而按快频轮询,但公开接口这天本来也没有新数据,只是白请求几次,无害。
+function todayBeijingStr() {
+  return beijingDateStrFromSec(Math.floor(Date.now() / 1000));
+}
+// A股交易时段判断(周一至周五 9:15-11:30 / 13:00-15:00,北京时间,9:15 起把开盘集合竞价也纳入);
+// 不含节假日休市表,节假日会被误判成"该交易"从而按快频轮询,但公开接口这天本来也没有新数据,只是白请求几次,无害。
 function isTradingHours() {
   const bj = nowBeijing();
   const day = bj.getUTCDay();
   if (day === 0 || day === 6) return false;
   const mins = bj.getUTCHours() * 60 + bj.getUTCMinutes();
-  return (mins >= 9 * 60 + 30 && mins <= 11 * 60 + 30) || (mins >= 13 * 60 && mins <= 15 * 60);
+  return (mins >= 9 * 60 + 15 && mins <= 11 * 60 + 30) || (mins >= 13 * 60 && mins <= 15 * 60);
+}
+// 按 time 去重(后出现的覆盖先出现的)+ 升序排序;数字时间戳和 "YYYY-MM-DD" 字符串直接用
+// 大小比较符就能比出正确的先后顺序。喂给 series.setData() 前统一过一遍,防止极端情况下(比如慢速
+// 刷新和活价更新前后脚回来)出现重复/乱序时间戳把图表搞崩;顺带按 KLINE_DATALEN 裁剪长度,超出从头部丢。
+function sortDedupeBars(bars) {
+  const map = new Map();
+  bars.forEach(b => map.set(String(b.time), b));
+  const out = [...map.values()].sort((a, b) => (a.time < b.time ? -1 : a.time > b.time ? 1 : 0));
+  return out.length > KLINE_DATALEN ? out.slice(out.length - KLINE_DATALEN) : out;
 }
 
 // ============================================================
@@ -188,13 +211,16 @@ async function fetchKlineSina(symbol, scale, datalen) {
   const raw = window[varName];
   try { delete window[varName]; } catch (e) {}
   if (!Array.isArray(raw) || raw.length === 0) throw new Error("empty");
+  const isDaily = scale === 240;
   const bars = raw.map(r => ({
-    time: parseBeijingTime(r.day),
+    time: isDaily ? toDateStr(r.day) : parseBeijingTime(r.day),
     open: parseFloat(r.open), high: parseFloat(r.high), low: parseFloat(r.low), close: parseFloat(r.close),
-    volume: parseFloat(r.volume) || 0,
-  })).filter(b => isFinite(b.time) && isFinite(b.close));
+    // 接口成交量单位没法在沙盒里核实,保守假设是"手"、统一 ×100 换算成"股",和实时快照(确认是"股")对齐,
+    // 避免活价更新时把最后一根K线的成交量猛地推大 100 倍、触发离谱的假爆量提醒。
+    volume: (parseFloat(r.volume) || 0) * 100,
+  })).filter(b => (isDaily ? !!b.time : isFinite(b.time)) && isFinite(b.close));
   if (!bars.length) throw new Error("empty");
-  return bars;
+  return sortDedupeBars(bars);
 }
 async function fetchKlineTencent(symbol, scale, datalen) {
   const varName = `_tkl_${symbol.replace(/[^a-z0-9]/gi, "")}_${scale}_${Date.now()}`;
@@ -206,13 +232,14 @@ async function fetchKlineTencent(symbol, scale, datalen) {
   try { delete window[varName]; } catch (e) {}
   const d = raw && raw.data && raw.data[symbol];
   const list = d ? (d.day || d.qfqday || d["m" + scale] || []) : [];
+  const isDaily = scale === 240;
   const bars = list.map(row => ({
-    time: parseBeijingTime(row[0]),
+    time: isDaily ? toDateStr(row[0]) : parseBeijingTime(row[0]),
     open: parseFloat(row[1]), close: parseFloat(row[2]), high: parseFloat(row[3]), low: parseFloat(row[4]),
-    volume: parseFloat(row[5]) || 0,
-  })).filter(b => isFinite(b.time) && isFinite(b.close));
+    volume: (parseFloat(row[5]) || 0) * 100, // 同上,统一按"手"->"股" ×100
+  })).filter(b => (isDaily ? !!b.time : isFinite(b.time)) && isFinite(b.close));
   if (!bars.length) throw new Error("empty");
-  return bars;
+  return sortDedupeBars(bars);
 }
 async function fetchKline(symbol, scale, datalen) {
   try { return await fetchKlineSina(symbol, scale, datalen); }
@@ -222,14 +249,17 @@ async function fetchKline(symbol, scale, datalen) {
 // ============================================================
 // 周K:对日K在浏览器本地按自然周(周一为一周起点,北京时间)聚合
 // ============================================================
-function weekKeyOf(unixSec) {
-  const d = new Date((unixSec + 8 * 3600) * 1000);
+// 日K的 time 现在是 "YYYY-MM-DD" 字符串;算出它所在那一周(周一为起点,北京时间)的周一日期,
+// 同样以 "YYYY-MM-DD" 字符串返回,周K 系列的 time 就用这个,和日K 保持同一种 business-day 格式。
+function weekKeyOf(dateStr) {
+  const sec = parseBeijingTime(dateStr);
+  const d = new Date((sec + 8 * 3600) * 1000);
   const day = d.getUTCDay();
   const diffToMonday = (day + 6) % 7;
   const monday = new Date(d);
   monday.setUTCDate(d.getUTCDate() - diffToMonday);
   monday.setUTCHours(0, 0, 0, 0);
-  return Math.floor(monday.getTime() / 1000) - 8 * 3600;
+  return beijingDateStrFromSec(Math.floor(monday.getTime() / 1000) - 8 * 3600);
 }
 function resampleWeekly(dailyBars) {
   const out = [];
@@ -311,8 +341,14 @@ function toPercentSeries(bars) {
 }
 
 // ============================================================
-// 实时报价:批量刷新,推动"当前正在成形的那根K线"的 close/high/low,
-// 并且只在这根K线所在的时间桶还没走完时才推,时间桶已经翻篇就跳过、等下一次慢速K线刷新自然补上新柱子。
+// 实时报价:批量刷新,推动"当前正在成形的那根K线"。
+// 日K(D):按北京时间日期字符串比较——最后一根就是今天,原地更新 close/high/low,
+//   并且把 volume 整个替换成快照的当日累计成交量(不是加,是替换,快照本来就是累计值);
+//   最后一根还是昨天(服务端还没吐出今天这根,开盘瞬间常见),直接 push 一根新的日K。
+// 分钟K(5m/15m/30m/60m):按时间桶比较——桶没变就原地改 close/high/low;
+//   桶已经翻篇,不再是"跳过等60秒慢速刷新",而是立刻 push 一根新桶的K线(量能先记 0,
+//   60秒内的慢速刷新会用服务端真实值把这根K线整体纠正回来)。
+// 两种情况处理完都过一遍去重+排序+裁剪,防止极端时序下出现重复/乱序时间戳。
 // ============================================================
 const quotes = new Map(); // symbol -> 最近一次成功的报价
 
@@ -321,10 +357,6 @@ function activeSymbols() {
 }
 
 function bucketStartFor(tf, nowSec) {
-  if (tf === "D") {
-    const bj = nowSec + 8 * 3600;
-    return Math.floor(bj / 86400) * 86400 - 8 * 3600;
-  }
   const bucket = TF_SECONDS[tf];
   return Math.floor(nowSec / bucket) * bucket;
 }
@@ -339,11 +371,34 @@ function applyQuoteToKline(symbol, q) {
     doneTf.add(tfKey);
     const entry = klineCache.get(cacheKey(symbol, tfKey));
     if (!entry || !entry.bars.length) return;
-    const last = entry.bars[entry.bars.length - 1];
-    if (last.time !== bucketStartFor(tfKey, nowSec)) return; // 这根K线的时间桶已经过去了,别乱改旧数据
-    last.close = q.current;
-    last.high = Math.max(last.high, q.current);
-    last.low = Math.min(last.low, q.current);
+    let bars = entry.bars;
+    const last = bars[bars.length - 1];
+
+    if (tfKey === "D") {
+      const todayStr = todayBeijingStr();
+      if (last.time === todayStr) {
+        last.close = q.current;
+        last.high = Math.max(last.high, q.current);
+        last.low = Math.min(last.low, q.current);
+        last.volume = q.volume; // 快照的成交量就是"今天累计到现在",直接整个替换
+      } else if (last.time < todayStr) {
+        bars.push({ time: todayStr, open: q.open || q.current, high: q.high || q.current, low: q.low || q.current, close: q.current, volume: q.volume });
+      } else {
+        return; // last.time > todayStr 理论上不会发生(时钟异常之类),保守跳过不动它
+      }
+    } else {
+      const bucket = bucketStartFor(tfKey, nowSec);
+      if (last.time === bucket) {
+        last.close = q.current;
+        last.high = Math.max(last.high, q.current);
+        last.low = Math.min(last.low, q.current);
+      } else if (last.time < bucket) {
+        bars.push({ time: bucket, open: q.current, high: q.current, low: q.current, close: q.current, volume: 0 });
+      } else {
+        return;
+      }
+    }
+    entry.bars = sortDedupeBars(bars);
   });
 }
 
@@ -365,7 +420,7 @@ async function fastTick() {
     }
   }
   Object.entries(data).forEach(([sym, q]) => { quotes.set(sym, q); applyQuoteToKline(sym, q); });
-  statusEl.textContent = `最近更新 ${new Date().toLocaleTimeString("zh-CN")} · 数据源:${source}${isTradingHours() ? "" : "(非交易时段)"}`;
+  statusEl.textContent = `最近更新 ${new Date().toLocaleTimeString("zh-CN")} · 数据源:${source}${isTradingHours() ? "" : "(非交易时段,已降频)"}`;
   cells.forEach(c => { updateHeader(c); checkAlerts(c); });
 }
 
@@ -397,7 +452,7 @@ function buildCellDOM(idx, symbol) {
   el.innerHTML = `
     <div class="flex items-center gap-2 px-2 py-1.5 border-b border-slate-800 bg-black/20 text-xs shrink-0">
       <input class="sym-input w-20 bg-slate-800 rounded px-1.5 py-1 text-slate-100 outline-none focus:ring-1 focus:ring-blue-500 uppercase" value="${symbol}" spellcheck="false" placeholder="代码">
-      <span class="tf-badge hidden text-[10px] text-slate-500 bg-slate-800 rounded px-1.5 py-0.5"></span>
+      <span class="tf-badge text-[10px] text-slate-500 bg-slate-800 rounded px-1.5 py-0.5"></span>
       <span class="kline-err hidden text-amber-400 text-[10px]" title="K线刷新失败,已保留上次数据">⚠</span>
       <span class="price font-mono font-bold text-sm ml-1 text-slate-100">--</span>
       <span class="chg font-mono text-xs text-slate-400">--</span>
@@ -451,6 +506,7 @@ function rebuildCellChart(cell) {
   cell.candleSeries.setData(display);
   cell.volumeSeries.setData(raw.map(b => ({ time: b.time, value: b.volume, color: b.close >= b.open ? "rgba(34,197,94,.5)" : "rgba(239,68,68,.5)" })));
   cell.chart.timeScale().fitContent();
+  cell.tfBadge.textContent = TF_LABEL[cell.tf];
   cell.klineErrEl.classList.toggle("hidden", !klineErrorForCell(cell));
   updateHeader(cell);
   checkAlerts(cell);
@@ -544,8 +600,6 @@ function enterMultiTimeframe(symbol) {
     cell.tf = TIMEFRAMES[i];
     cell.symInput.value = symbol;
     cell.symInput.readOnly = true;
-    cell.tfBadge.textContent = TF_LABEL[cell.tf];
-    cell.tfBadge.classList.remove("hidden");
     rebuildCellChart(cell);
     ensureKline(symbol, cell.tf, true);
   });
@@ -561,7 +615,6 @@ function exitMultiTimeframe() {
     cell.tf = DEFAULT_TF;
     cell.symInput.value = cell.symbol;
     cell.symInput.readOnly = false;
-    cell.tfBadge.classList.add("hidden");
     rebuildCellChart(cell);
     ensureKline(cell.symbol, cell.tf, true);
   });
@@ -611,7 +664,7 @@ function wireCellEvents(cell) {
 // ============================================================
 let fastTimer = null;
 function fastIntervalForNow(baseMs) {
-  return isTradingHours() ? baseMs : Math.max(baseMs, 120000);
+  return isTradingHours() ? baseMs : 300000; // 非交易时段固定降频到 5 分钟一次
 }
 function scheduleFast() {
   clearTimeout(fastTimer);
@@ -696,17 +749,15 @@ function init() {
 }
 
 // 对外接口:预留给未来手动/外部数据源按 (symbol, 周期, 单根K线) 推送,不是主路径。
-// tf 取值同 TIMEFRAMES;bar: { time: 秒级 unix 时间戳, open, high, low, close, volume }
+// tf 取值同 TIMEFRAMES;bar: { time, open, high, low, close, volume } ——
+// tf 为 5m/15m/30m/60m 时 time 是秒级 unix 时间戳(数字),tf 为 D/W 时 time 是 "YYYY-MM-DD" 字符串。
 window.updateChart = function (symbol, tf, bar) {
   symbol = String(symbol).toUpperCase();
   const tfKey = storeTfKey(tf || DEFAULT_TF);
   const key = cacheKey(symbol, tfKey);
   let entry = klineCache.get(key);
   if (!entry) { entry = { bars: [], lastFetch: Date.now(), fetching: false, error: false }; klineCache.set(key, entry); evictIfNeeded(); }
-  const arr = entry.bars;
-  const last = arr[arr.length - 1];
-  if (last && last.time === bar.time) Object.assign(last, bar);
-  else if (!last || bar.time > last.time) arr.push({ ...bar });
+  entry.bars = sortDedupeBars([...entry.bars, bar]);
   renderAffected(symbol, tfKey);
 };
 
