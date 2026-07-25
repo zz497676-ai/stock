@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>六宫格盯盘</title>
+<title>多窗盯盘台</title>
 <style>
   :root{
     --bg:#0b0e13;
@@ -12,6 +12,8 @@
     --text:#e6e9ef;
     --muted:#8b93a5;
     --accent:#2b6cff;
+    --up:#f0503a;
+    --down:#2ecc71;
   }
   *{box-sizing:border-box;margin:0;padding:0}
   html,body{height:100%}
@@ -29,14 +31,44 @@
     flex:0 0 auto;
     background:var(--panel);
     border-bottom:1px solid var(--line);
-    padding:8px 10px;
-    display:flex;flex-wrap:wrap;align-items:center;gap:8px;
+    padding:7px 10px;
+    display:flex;flex-direction:column;gap:6px;
   }
-  .brand{font-weight:600;letter-spacing:.5px;white-space:nowrap;margin-right:2px}
-  .inputs{
-    flex:1 1 620px;
-    display:grid;grid-template-columns:repeat(6,minmax(104px,1fr));gap:6px;
+  .row{display:flex;flex-wrap:wrap;align-items:center;gap:8px;min-width:0}
+  .brand{font-weight:600;letter-spacing:.5px;white-space:nowrap}
+  select,button{
+    background:#0e1219;color:var(--text);
+    border:1px solid var(--line);border-radius:5px;
+    padding:6px 10px;font:inherit;cursor:pointer;outline:none;
   }
+  select:hover,button:hover{border-color:#39415a}
+  select:disabled{opacity:.4;cursor:not-allowed}
+  button.primary{background:var(--accent);border-color:var(--accent);font-weight:600}
+  button.primary:hover{background:#3a78ff}
+  label.chk{display:flex;align-items:center;gap:4px;color:var(--muted);white-space:nowrap;cursor:pointer;user-select:none}
+
+  .seg{display:flex;gap:0;flex:0 0 auto}
+  .seg button{border-radius:0;border-right-width:0;padding:6px 11px;color:var(--muted)}
+  .seg button:first-child{border-radius:5px 0 0 5px}
+  .seg button:last-child{border-radius:0 5px 5px 0;border-right-width:1px}
+  .seg button.on{background:#1d2431;color:var(--text);border-color:#39415a;font-weight:600}
+  .seg button.on+button{border-left-color:#39415a}
+
+  /* 大盘摘要 */
+  .market{margin-left:auto;display:flex;gap:14px;align-items:center;white-space:nowrap}
+  .market:empty{display:none}
+  .mi{display:flex;align-items:baseline;gap:5px;font-size:12px}
+  .mi i{color:var(--muted);font-style:normal}
+  .mi b{font-family:ui-monospace,Menlo,Consolas,monospace;font-weight:600}
+  .mi em{font-style:normal;font-size:11px;font-family:ui-monospace,Menlo,Consolas,monospace}
+  .mi .up{color:var(--up)} .mi .down{color:var(--down)} .mi .flat{color:var(--muted)}
+
+  /* 输入区 */
+  .inputs{flex:1 1 auto;min-width:0;display:grid;gap:6px}
+  .inputs.c4{grid-template-columns:repeat(4,minmax(88px,1fr))}
+  .inputs.c6{grid-template-columns:repeat(6,minmax(88px,1fr))}
+  .inputs.c9{grid-template-columns:repeat(9,minmax(80px,1fr))}
+  .inputs.single{grid-template-columns:minmax(180px,260px)}
   .inputs input{
     width:100%;min-width:0;
     background:#0e1219;color:var(--text);
@@ -45,38 +77,45 @@
     outline:none;
   }
   .inputs input:focus{border-color:var(--accent)}
-  select,button{
-    background:#0e1219;color:var(--text);
-    border:1px solid var(--line);border-radius:5px;
-    padding:6px 10px;font:inherit;cursor:pointer;outline:none;
-  }
-  button.primary{background:var(--accent);border-color:var(--accent);font-weight:600}
-  button:hover,select:hover{border-color:#39415a}
-  button.primary:hover{background:#3a78ff}
-  label.chk{display:flex;align-items:center;gap:4px;color:var(--muted);white-space:nowrap;cursor:pointer;user-select:none}
   .tip{
-    flex:0 1 auto;min-width:0;
-    color:var(--muted);font-size:12px;
+    flex:0 1 auto;min-width:0;color:var(--muted);font-size:12px;
     white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
   }
   .tip b{color:#c9d1e0;font-weight:500}
+  .tip kbd{
+    font:11px/1 ui-monospace,Menlo,Consolas,monospace;color:#c9d1e0;
+    border:1px solid var(--line);border-bottom-width:2px;border-radius:3px;padding:2px 4px;
+  }
 
-  /* ---------- 六宫格 ---------- */
+  /* ---------- 宫格 ---------- */
   main{
     flex:1 1 auto;min-height:0;
-    display:grid;
-    grid-template-columns:repeat(3,minmax(0,1fr));
-    grid-template-rows:repeat(2,minmax(0,1fr));
-    gap:1px;background:var(--line);
+    display:grid;gap:1px;background:var(--line);
   }
+  main.g4{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:repeat(2,minmax(0,1fr))}
+  main.g6{grid-template-columns:repeat(3,minmax(0,1fr));grid-template-rows:repeat(2,minmax(0,1fr))}
+  main.g9{grid-template-columns:repeat(3,minmax(0,1fr));grid-template-rows:repeat(3,minmax(0,1fr))}
+  main.g4 .cell:nth-child(n+5),
+  main.g6 .cell:nth-child(n+7){display:none}
+
   .cell{position:relative;background:#0f1115;min-width:0;min-height:0;overflow:hidden}
   .cell .host{width:100%;height:100%}
   .cell .host>div{width:100%;height:100%}
-  .cell .empty{
+  .note{
     width:100%;height:100%;
-    display:flex;align-items:center;justify-content:center;
-    color:#4b5364;font-size:12px;text-align:center;padding:0 12px;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;
+    color:#5b6376;font-size:12px;text-align:center;padding:0 16px;line-height:1.7;
   }
+  .note button{margin-top:4px;padding:4px 10px;font-size:12px;color:var(--muted)}
+  .note button:hover{color:var(--text)}
+  .idx{
+    position:absolute;left:0;bottom:0;z-index:4;
+    padding:2px 7px;border-radius:0 4px 0 0;
+    background:rgba(11,14,19,.7);
+    color:var(--muted);font-size:11px;font-family:ui-monospace,Menlo,Consolas,monospace;
+    opacity:.45;transition:opacity .15s;pointer-events:none;
+  }
+  .cell:hover .idx{opacity:1}
   .zoombtn{
     position:absolute;top:4px;right:4px;z-index:5;
     width:24px;height:24px;padding:0;line-height:22px;text-align:center;
@@ -91,12 +130,9 @@
   main.zoomed .cell.zoom{display:block}
   main.zoomed .zoombtn{opacity:1}
 
-  /* ---------- 新浪分时图(A股分钟周期) ---------- */
+  /* ---------- 新浪分时图 ---------- */
   .sina{position:relative;width:100%;height:100%;background:#0f1115}
-  .sina-stage{
-    width:100%;height:100%;
-    display:flex;align-items:center;justify-content:center;
-  }
+  .sina-stage{width:100%;height:100%;display:flex;align-items:center;justify-content:center}
   .sina-stage img{width:100%;height:100%;object-fit:contain;display:block}
   .sina-tag{
     position:absolute;left:5px;top:5px;z-index:4;
@@ -108,25 +144,24 @@
   }
   .sina-tag b{color:#e6e9ef;font-weight:600;font-family:ui-monospace,Menlo,Consolas,monospace}
   .sina-tag .dot{
-    width:6px;height:6px;border-radius:50%;background:#2ecc71;flex:0 0 auto;
+    width:6px;height:6px;border-radius:50%;background:var(--down);flex:0 0 auto;
     animation:pulse 2s ease-in-out infinite;
   }
-  .sina-tag.stale .dot{background:#e0603a;animation:none}
+  .sina-tag.stale .dot{background:var(--up);animation:none}
   @keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
-  .sina-err{
-    width:100%;height:100%;
-    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;
-    color:#6b7488;font-size:12px;text-align:center;padding:0 14px;
-  }
 
   @media (max-width:1080px){
-    main{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:repeat(3,minmax(0,1fr))}
-    .inputs{flex:1 1 320px;grid-template-columns:repeat(3,minmax(84px,1fr))}
+    main.g4,main.g6,main.g9{
+      grid-template-columns:repeat(2,minmax(0,1fr));
+      grid-template-rows:none;grid-auto-rows:minmax(0,1fr);
+    }
+    .inputs.c6,.inputs.c9{grid-template-columns:repeat(5,minmax(80px,1fr))}
+    .market{display:none}
   }
   @media (max-width:680px){
     body{overflow:auto}
-    main{grid-template-columns:1fr;grid-template-rows:none;grid-auto-rows:62vh}
-    .inputs{flex:1 1 200px;grid-template-columns:repeat(2,minmax(0,1fr))}
+    main.g4,main.g6,main.g9{grid-template-columns:1fr;grid-auto-rows:62vh}
+    .inputs.c4,.inputs.c6,.inputs.c9{grid-template-columns:repeat(2,minmax(0,1fr))}
     .tip{display:none}
   }
 </style>
@@ -134,127 +169,225 @@
 <body>
 
 <header>
-  <span class="brand">六宫格盯盘</span>
+  <div class="row">
+    <span class="brand">盯盘台</span>
 
-  <div class="inputs" id="inputs"></div>
+    <div class="seg" id="groups"></div>
 
-  <select id="interval" title="K线周期(A股选分钟周期时自动切换为新浪实时分时图)">
-    <option value="1">分时 / 1分</option>
-    <option value="5">5分</option>
-    <option value="15">15分</option>
-    <option value="30">30分</option>
-    <option value="60">60分</option>
-    <option value="240">4小时</option>
-    <option value="D">日线</option>
-    <option value="W">周线</option>
-    <option value="M">月线</option>
-  </select>
+    <select id="layout" title="宫格数量">
+      <option value="4">4 宫格 2×2</option>
+      <option value="6">6 宫格 3×2</option>
+      <option value="9">9 宫格 3×3</option>
+    </select>
 
-  <label class="chk"><input type="checkbox" id="toolbar"> 工具栏</label>
-  <button class="primary" id="apply">应用</button>
-  <button id="reset" title="恢复默认代码">重置</button>
-  <span class="tip" id="tip" title="代码格式:NASDAQ:AAPL / HKEX:700 / SSE:600519,纯数字可省略前缀。A股选分钟周期时,TradingView 无免费分钟数据,自动改用新浪实时分时图(每5秒刷新)"><b>NASDAQ:AAPL</b> / <b>HKEX:700</b> / <b>SSE:600519</b>,可省前缀</span>
+    <select id="mode" title="看盘模式">
+      <option value="multi">多股对比</option>
+      <option value="single">单股多周期</option>
+    </select>
+
+    <select id="interval" title="K线周期(A股选分钟周期时自动改用新浪实时分时图)">
+      <option value="1">分时 / 1分</option>
+      <option value="5">5分</option>
+      <option value="15">15分</option>
+      <option value="30">30分</option>
+      <option value="60">60分</option>
+      <option value="240">4小时</option>
+      <option value="D">日线</option>
+      <option value="W">周线</option>
+      <option value="M">月线</option>
+    </select>
+
+    <label class="chk"><input type="checkbox" id="toolbar"> 工具栏</label>
+    <button class="primary" id="apply">应用</button>
+    <button id="reset" title="把当前分组恢复为默认代码">重置</button>
+
+    <div class="market" id="market"></div>
+  </div>
+
+  <div class="row">
+    <div class="inputs" id="inputs"></div>
+    <span class="tip" id="tip"></span>
+  </div>
 </header>
 
-<main id="grid"></main>
+<main id="grid" class="g6"></main>
 
 <datalist id="hints">
+  <option value="SSE:000001">上证指数</option>
+  <option value="SZSE:399006">创业板指</option>
+  <option value="SSE:600519">贵州茅台</option>
+  <option value="SZSE:300750">宁德时代</option>
+  <option value="SSE:601318">中国平安</option>
+  <option value="SSE:688981">中芯国际</option>
+  <option value="HKEX:700">腾讯控股</option>
+  <option value="HKEX:9988">阿里巴巴</option>
+  <option value="HSI:HSI">恒生指数</option>
   <option value="NASDAQ:AAPL">苹果</option>
   <option value="NASDAQ:NVDA">英伟达</option>
   <option value="NASDAQ:TSLA">特斯拉</option>
   <option value="NASDAQ:IXIC">纳斯达克指数</option>
   <option value="SP:SPX">标普500</option>
-  <option value="HKEX:700">腾讯控股</option>
-  <option value="HKEX:9988">阿里巴巴</option>
-  <option value="HSI:HSI">恒生指数</option>
-  <option value="SSE:000001">上证指数</option>
-  <option value="SZSE:399006">创业板指</option>
-  <option value="SSE:600519">贵州茅台</option>
-  <option value="SZSE:300750">宁德时代</option>
 </datalist>
 
 <script>
 (function(){
   'use strict';
 
-  var KEY = 'sixgrid_stock_v1';
-  var N = 6;
-  var DEFAULTS = ['SSE:000001','SSE:600519','SZSE:300750','HKEX:700','NASDAQ:AAPL','NASDAQ:NVDA'];
-  var SINA_MS = 5000;              // 新浪分时图刷新间隔
-  var MINUTES = ['1','3','5','15','30','60','120','240'];   // 视为“分钟/分时”的周期
+  /* ================= 常量 ================= */
+  var KEY = 'stockdesk_v2';          // 本版配置
+  var OLD_KEY = 'sixgrid_stock_v1';  // 旧版配置(自动迁移)
+  var MAX = 9;                       // 最大宫格数
+  var SINA_MS = 5000;                // 分时图刷新间隔
+  var MKT_MS = 10000;                // 大盘摘要刷新间隔
+  var MOUNT_GAP = 150;               // 宫格错峰加载间隔
 
+  var MINUTES = ['1','3','5','15','30','60','120','240'];
+  var IV_LABEL = {'1':'分时','3':'3分','5':'5分','15':'15分','30':'30分',
+                  '60':'60分','120':'2小时','240':'4小时','D':'日线','W':'周线','M':'月线'};
+
+  // 单股多周期模式下,各宫格数对应的周期编排
+  var SINGLE_PERIODS = {
+    4:['1','15','60','D'],
+    6:['1','5','15','60','D','W'],
+    9:['1','5','15','30','60','240','D','W','M']
+  };
+
+  var GROUP_NAMES = ['分组一','分组二','分组三'];
+  var DEFAULTS = [
+    ['SSE:000001','SSE:600519','SZSE:300750','HKEX:700','NASDAQ:AAPL','NASDAQ:NVDA','SZSE:399006','HKEX:9988','NASDAQ:TSLA'],
+    ['SSE:601318','SSE:600036','SSE:601899','SZSE:000858','SZSE:002594','SSE:688981','SSE:600030','SZSE:300059','SSE:601012'],
+    ['NASDAQ:IXIC','SP:SPX','NASDAQ:MSFT','NASDAQ:AMZN','NASDAQ:GOOGL','NASDAQ:META','HKEX:3690','HKEX:1810','NASDAQ:AMD']
+  ];
+  var SINGLE_DEFAULT = ['SSE:600519','SSE:601318','NASDAQ:MSFT'];
+
+  /* ================= DOM ================= */
   var grid = document.getElementById('grid');
   var inputsBox = document.getElementById('inputs');
+  var groupsBox = document.getElementById('groups');
+  var layoutSel = document.getElementById('layout');
+  var modeSel = document.getElementById('mode');
   var intervalSel = document.getElementById('interval');
   var toolbarChk = document.getElementById('toolbar');
+  var marketBox = document.getElementById('market');
   var tip = document.getElementById('tip');
 
-  var inputs = [];   // 6 个输入框
-  var hosts = [];    // 6 个图表挂载点
-  var mounted = [];  // 各宫格当前已渲染的配置指纹,用于跳过无变化的重载
-  var mountTimers = [];              // 错峰加载定时器
-  var refreshTimers = new Array(N);  // 各宫格的新浪分时图刷新定时器
-  var reloaders = new Array(N);      // 各宫格的立即刷新函数(标签页重新可见时调用)
+  var inputs = [];                     // 当前输入框
+  var hosts = [];                      // 9 个宫格挂载点
+  var idxTags = [];                    // 9 个角标
+  var mounted = new Array(MAX);        // 各宫格已渲染配置的指纹
+  var mountTimers = [];                // 错峰加载定时器
+  var refreshTimers = new Array(MAX);  // 分时图刷新定时器
+  var reloaders = new Array(MAX);      // 分时图立即刷新函数
+  var zoomIdx = -1;                    // 当前放大的宫格下标
 
-  /* ---------- 配置读写 ---------- */
-  function loadState(){
-    var s = {symbols:DEFAULTS.slice(), interval:'D', toolbar:false};
-    try{
-      var raw = localStorage.getItem(KEY);
-      if(raw){
-        var o = JSON.parse(raw);
-        if(Array.isArray(o.symbols)){
-          for(var i=0;i<N;i++){
-            if(typeof o.symbols[i] === 'string') s.symbols[i] = o.symbols[i];
+  /* ================= 状态 ================= */
+  function defState(){
+    return {
+      v:2, layout:6, mode:'multi', interval:'D', toolbar:false, gi:0,
+      groups:[0,1,2].map(function(g){
+        return {name:GROUP_NAMES[g], symbols:DEFAULTS[g].slice(), single:SINGLE_DEFAULT[g]};
+      })
+    };
+  }
+
+  function mergeState(s, o){
+    if(!o || typeof o !== 'object') return;
+    if(o.layout === 4 || o.layout === 6 || o.layout === 9) s.layout = o.layout;
+    if(o.mode === 'single' || o.mode === 'multi') s.mode = o.mode;
+    if(typeof o.interval === 'string' && o.interval) s.interval = o.interval;
+    s.toolbar = !!o.toolbar;
+    if(typeof o.gi === 'number' && o.gi >= 0 && o.gi < 3) s.gi = o.gi | 0;
+    if(Object.prototype.toString.call(o.groups) === '[object Array]'){
+      for(var g=0; g<3; g++){
+        var src = o.groups[g];
+        if(!src || typeof src !== 'object') continue;
+        if(typeof src.name === 'string' && src.name) s.groups[g].name = src.name.slice(0,10);
+        if(typeof src.single === 'string') s.groups[g].single = src.single;
+        if(Object.prototype.toString.call(src.symbols) === '[object Array]'){
+          for(var i=0;i<MAX;i++){
+            if(typeof src.symbols[i] === 'string') s.groups[g].symbols[i] = src.symbols[i];
           }
         }
-        if(typeof o.interval === 'string') s.interval = o.interval;
+      }
+    }
+  }
+
+  function loadState(){
+    var s = defState();
+    try{
+      var raw = localStorage.getItem(KEY);
+      if(raw){ mergeState(s, JSON.parse(raw)); return s; }
+      var old = localStorage.getItem(OLD_KEY);      // 从旧版单组配置迁移
+      if(old){
+        var o = JSON.parse(old);
+        if(Object.prototype.toString.call(o.symbols) === '[object Array]'){
+          for(var i=0;i<6;i++){
+            if(typeof o.symbols[i] === 'string') s.groups[0].symbols[i] = o.symbols[i];
+          }
+        }
+        if(typeof o.interval === 'string' && o.interval) s.interval = o.interval;
         s.toolbar = !!o.toolbar;
       }
-    }catch(e){ /* localStorage 不可用或数据损坏时用默认值 */ }
+    }catch(e){ /* 无本地存储或数据损坏时用默认值 */ }
     return s;
   }
 
-  function saveState(s){
-    try{ localStorage.setItem(KEY, JSON.stringify(s)); }
+  function saveState(){
+    try{ localStorage.setItem(KEY, JSON.stringify(state)); }
     catch(e){ return false; }
     return true;
   }
 
-  /* ---------- 代码规范化:允许只输入数字 ---------- */
+  var state = loadState();
+  function group(){ return state.groups[state.gi]; }
+
+  /* ================= 代码处理 ================= */
   function normalize(v){
     var s = (v||'').replace(/\s/g,'').replace(/[：]/g,':').toUpperCase();
     if(!s) return '';
     if(s.indexOf(':') > -1) return s;
-    if(/^\d{6}$/.test(s)){                       // A 股 6 位代码
+    if(/^\d{6}$/.test(s)){                            // A 股 6 位代码
       var h = s.charAt(0);
-      if(h==='6'||h==='9') return 'SSE:'+s;      // 沪市
+      if(h==='6'||h==='9') return 'SSE:'+s;           // 沪市
       if(h==='0'||h==='2'||h==='3') return 'SZSE:'+s; // 深市
-      if(h==='4'||h==='8') return 'BSE:'+s;      // 北交所
+      if(h==='4'||h==='8') return 'BSE:'+s;           // 北交所
       return 'SSE:'+s;
     }
-    if(/^\d{1,5}$/.test(s)) return 'HKEX:'+String(parseInt(s,10)); // 港股,去掉前导 0
-    return s;                                    // 其余交给 TradingView 自行解析
+    if(/^\d{1,5}$/.test(s)) return 'HKEX:'+String(parseInt(s,10)); // 港股,去前导 0
+    return s;                                         // 其余交给 TradingView 解析
   }
 
-  /* ---------- A 股判定:SSE:600519 -> sh600519 ---------- */
   var SINA_PREFIX = {SSE:'sh', SZSE:'sz', BSE:'bj'};
-  function sinaCode(symbol){
-    var m = /^(SSE|SZSE|BSE):(\d{6})$/.exec(symbol);
+  function sinaCode(symbol){                          // A 股判定:SSE:600519 -> sh600519
+    var m = /^(SSE|SZSE|BSE):(\d{6})$/.exec(symbol||'');
     return m ? SINA_PREFIX[m[1]] + m[2] : '';
   }
-  function isMinute(interval){
-    for(var i=0;i<MINUTES.length;i++){ if(MINUTES[i] === interval) return true; }
+  function isMinute(iv){
+    for(var i=0;i<MINUTES.length;i++){ if(MINUTES[i] === iv) return true; }
     return false;
   }
 
-  /* ---------- 定时器清理 ---------- */
+  /* 单股多周期:A 股免费行情只有 分时/日/周/月,先去重再补空,避免出现多张相同的分时图 */
+  function singlePeriods(symbol, n){
+    var base = SINGLE_PERIODS[n] || SINGLE_PERIODS[6];
+    if(!sinaCode(symbol)) return base.slice();
+    var all = base.concat(['D','W','M']), seen = {}, out = [];
+    for(var i=0;i<all.length;i++){
+      var k = isMinute(all[i]) ? '1' : all[i];
+      if(seen[k]) continue;
+      seen[k] = 1; out.push(k);
+    }
+    while(out.length < n) out.push('');
+    return out.slice(0, n);
+  }
+
+  /* ================= 渲染:定时器清理 ================= */
   function stopRefresh(i){
     if(refreshTimers[i]){ clearInterval(refreshTimers[i]); refreshTimers[i] = null; }
     reloaders[i] = null;
   }
 
-  /* ---------- 渲染:新浪实时分时图(A股 + 分钟周期) ---------- */
+  /* ================= 渲染:新浪实时分时图 ================= */
   function mountSina(i, host, symbol, code){
     var url = 'https://image.sinajs.cn/newchart/min/n/' + code + '.gif';
 
@@ -271,17 +404,14 @@
     var stamp = document.createElement('span');
     stamp.textContent = '新浪分时 · 加载中';
     tag.appendChild(name); tag.appendChild(dot); tag.appendChild(stamp);
-    wrap.appendChild(stage);
-    wrap.appendChild(tag);
+    wrap.appendChild(stage); wrap.appendChild(tag);
     host.appendChild(wrap);
 
     var loaded = false;
-
     function show(node){
       while(stage.firstChild) stage.removeChild(stage.firstChild);
       stage.appendChild(node);
     }
-
     function load(){
       if(document.hidden) return;                 // 后台标签页不拉图,省流量和 CPU
       var img = new Image();
@@ -289,16 +419,16 @@
       img.alt = symbol + ' 分时图';
       img.onload = function(){
         loaded = true;
-        show(img);                                // 加载完成再替换,避免刷新时闪白
+        show(img);                                // 新图加载完再替换,避免刷新闪白
         tag.classList.remove('stale');
         stamp.textContent = '新浪分时 · ' + new Date().toLocaleTimeString('zh-CN',{hour12:false});
       };
       img.onerror = function(){
         tag.classList.add('stale');
         stamp.textContent = '新浪分时 · 刷新失败,重试中';
-        if(!loaded){                              // 一次都没加载出来才显示错误占位
+        if(!loaded){
           var err = document.createElement('div');
-          err.className = 'sina-err';
+          err.className = 'note';
           err.textContent = '分时图加载失败:' + code + ',请检查网络或代码是否正确';
           show(err);
         }
@@ -311,8 +441,8 @@
     reloaders[i] = load;
   }
 
-  /* ---------- 渲染:TradingView 图表(日/周/月线,以及美股港股全周期) ---------- */
-  function mountTV(host, symbol, interval, toolbar){
+  /* ================= 渲染:TradingView 图表 ================= */
+  function mountTV(host, symbol, interval){
     var box = document.createElement('div');
     box.className = 'tradingview-widget-container';
     var slot = document.createElement('div');
@@ -335,7 +465,7 @@
       locale: 'zh_CN',
       backgroundColor: 'rgba(15,17,21,1)',
       gridColor: 'rgba(120,123,134,0.10)',
-      hide_top_toolbar: !toolbar,
+      hide_top_toolbar: !state.toolbar,
       hide_side_toolbar: true,
       hide_legend: false,
       allow_symbol_change: true,
@@ -349,133 +479,350 @@
     host.appendChild(box);
   }
 
-  /* ---------- 渲染单个宫格:按“代码 + 周期”选择数据源 ---------- */
-  function mount(i, symbol, interval, toolbar){
-    stopRefresh(i);                 // 先清掉这一格的旧定时器,防止泄漏
+  /* ================= 渲染:按“代码 + 周期”选择数据源 ================= */
+  function mount(i, symbol, interval){
+    stopRefresh(i);                       // 先清掉这一格的旧定时器,防止泄漏
     var host = hosts[i];
     host.innerHTML = '';
 
     if(!symbol){
-      var ph = document.createElement('div');
-      ph.className = 'empty';
-      ph.textContent = '未设置代码';
-      host.appendChild(ph);
+      host.appendChild(note('未设置代码'));
+      return;
+    }
+    if(!interval){                        // 单股多周期模式下 A 股多出来的宫格
+      var n = note('A 股免费行情只有 分时 / 日 / 周 / 月 四种周期',
+                   '单股多周期模式下,4 宫格正好一格一种');
+      var b = document.createElement('button');
+      b.textContent = '切到 4 宫格';
+      b.addEventListener('click', function(){ setLayout(4); });
+      n.appendChild(b);
+      host.appendChild(n);
       return;
     }
 
     var code = sinaCode(symbol);
     if(code && isMinute(interval)){
-      mountSina(i, host, symbol, code);   // A股分钟周期:TradingView 无免费分钟数据,改用新浪
+      mountSina(i, host, symbol, code);   // A 股分钟周期:TradingView 无免费数据,改用新浪
     }else{
-      mountTV(host, symbol, interval, toolbar);
+      mountTV(host, symbol, interval);
     }
   }
 
-  /* ---------- 应用:只重载发生变化的宫格,并错峰加载 ---------- */
-  function apply(save){
-    var interval = intervalSel.value;
-    var toolbar = toolbarChk.checked;
-    var symbols = [];
-    var pending = [];
+  function note(){
+    var d = document.createElement('div');
+    d.className = 'note';
+    for(var i=0;i<arguments.length;i++){
+      var line = document.createElement('div');
+      line.textContent = arguments[i];
+      d.appendChild(line);
+    }
+    return d;
+  }
 
-    for(var i=0;i<N;i++){
-      var sym = normalize(inputs[i].value);
-      inputs[i].value = sym;             // 回写规范化后的代码
-      symbols[i] = sym;
-      var sig = sym + '|' + interval + '|' + (toolbar?1:0);
+  function unmount(i){
+    stopRefresh(i);
+    hosts[i].innerHTML = '';
+    mounted[i] = null;
+  }
+
+  /* ================= 计划:算出每个宫格该显示什么 ================= */
+  function plan(){
+    var g = group(), out = [], i;
+    if(state.mode === 'single'){
+      var ps = singlePeriods(g.single, state.layout);
+      for(i=0;i<state.layout;i++) out.push({sym:g.single, iv:ps[i]});
+    }else{
+      for(i=0;i<state.layout;i++) out.push({sym:g.symbols[i], iv:state.interval});
+    }
+    return out;
+  }
+
+  /* ================= 渲染整屏:只重载有变化的宫格 ================= */
+  function render(){
+    grid.className = 'g' + state.layout + (zoomIdx >= 0 ? ' zoomed' : '');
+    if(zoomIdx >= state.layout) unzoom();
+
+    var p = plan(), pending = [], i;
+    for(i=0;i<MAX;i++){
+      if(i >= state.layout){
+        if(mounted[i]) unmount(i);        // 超出当前宫格数的,彻底卸载不留 iframe
+        continue;
+      }
+      var sig = p[i].sym + '|' + p[i].iv + '|' + (state.toolbar?1:0) + '|' + state.mode;
+      idxTags[i].textContent = (i+1) + (state.mode === 'single' && p[i].iv ? ' · ' + IV_LABEL[p[i].iv] : '');
       if(mounted[i] !== sig){
         mounted[i] = sig;
-        pending.push({idx:i, sym:sym});
+        pending.push({i:i, sym:p[i].sym, iv:p[i].iv});
       }
     }
 
-    mountTimers.forEach(clearTimeout);
+    for(i=0;i<mountTimers.length;i++) clearTimeout(mountTimers[i]);
     mountTimers = [];
-    pending.forEach(function(p, k){
-      mountTimers.push(setTimeout(function(){
-        mount(p.idx, p.sym, interval, toolbar);
-      }, k * 150));                      // 逐个加载,避免同时开 6 个 iframe 卡住低配机器
-    });
-
-    if(save){
-      var ok = saveState({symbols:symbols, interval:interval, toolbar:toolbar});
-      flash(ok ? '已保存,下次打开自动恢复' : '浏览器禁用了本地存储,本次设置不会保留');
+    for(i=0;i<pending.length;i++){
+      (function(x, k){
+        mountTimers.push(setTimeout(function(){ mount(x.i, x.sym, x.iv); }, k * MOUNT_GAP));
+      })(pending[i], i);                  // 逐个加载,避免同时开一堆 iframe 卡住低配机器
     }
   }
 
-  var tipHTML = tip.innerHTML, tipTimer;
+  /* ================= 输入框 ================= */
+  function mkInput(value, placeholder, title){
+    var inp = document.createElement('input');
+    inp.type = 'text';
+    inp.value = value || '';
+    inp.placeholder = placeholder;
+    inp.title = title || placeholder;
+    inp.setAttribute('list','hints');
+    inp.addEventListener('keydown', function(e){
+      if(e.key === 'Enter') apply(true);
+      else if(e.key === 'Escape') inp.blur();
+    });
+    return inp;
+  }
+
+  function buildInputs(){
+    inputsBox.innerHTML = '';
+    inputs = [];
+    if(state.mode === 'single'){
+      inputsBox.className = 'inputs single';
+      var one = mkInput(group().single, '股票代码', '所有宫格同步显示这只股票的不同周期');
+      inputsBox.appendChild(one);
+      inputs.push(one);
+    }else{
+      inputsBox.className = 'inputs c' + state.layout;
+      for(var i=0;i<state.layout;i++){
+        var inp = mkInput(group().symbols[i], '宫格 '+(i+1), '第 '+(i+1)+' 格的股票代码');
+        inputsBox.appendChild(inp);
+        inputs.push(inp);
+      }
+    }
+  }
+
+  /* 把界面上的值写回 state(规范化后回填输入框) */
+  function commit(){
+    var g = group();
+    state.interval = intervalSel.value || 'D';
+    state.toolbar = toolbarChk.checked;
+    if(state.mode === 'single'){
+      if(inputs[0]){ var v = normalize(inputs[0].value); inputs[0].value = v; g.single = v; }
+    }else{
+      for(var i=0;i<inputs.length;i++){
+        var s = normalize(inputs[i].value);
+        inputs[i].value = s;
+        g.symbols[i] = s;                 // 超出当前宫格数的代码原样保留,切回去还在
+      }
+    }
+  }
+
+  function apply(save){
+    commit();
+    render();
+    updateTip();
+    if(save) flash(saveState() ? '已保存,下次打开自动恢复' : '浏览器禁用了本地存储,本次设置不会保留');
+  }
+
+  /* ================= 提示条 ================= */
+  var tipTimer, tipBase = '';
+  function updateTip(){
+    if(state.mode === 'single'){
+      var ps = singlePeriods(group().single, state.layout), names = [];
+      for(var i=0;i<ps.length;i++) names.push(ps[i] ? IV_LABEL[ps[i]] : '—');
+      tipBase = '各宫格周期:<b>' + names.join(' / ') + '</b> · 数字键 <kbd>1</kbd>~<kbd>' +
+                state.layout + '</kbd> 放大,<kbd>Esc</kbd> 还原';
+    }else{
+      tipBase = '代码可省前缀(<b>600519</b> / <b>700</b>) · 数字键 <kbd>1</kbd>~<kbd>' +
+                state.layout + '</kbd> 放大,<kbd>Esc</kbd> 还原 · 双击分组名可重命名';
+    }
+    clearTimeout(tipTimer);
+    tip.innerHTML = tipBase;
+  }
   function flash(msg){
     tip.textContent = msg;
     clearTimeout(tipTimer);
-    tipTimer = setTimeout(function(){ tip.innerHTML = tipHTML; }, 2600);
+    tipTimer = setTimeout(function(){ tip.innerHTML = tipBase; }, 2600);
   }
 
-  /* ---------- 单格放大 ---------- */
+  /* ================= 放大 ================= */
+  function unzoom(){
+    if(zoomIdx < 0) return;
+    hosts[zoomIdx].parentNode.classList.remove('zoom');
+    zoomIdx = -1;
+    grid.classList.remove('zoomed');
+  }
   function toggleZoom(i){
-    var cell = hosts[i].parentNode;
-    var on = !cell.classList.contains('zoom');
-    for(var k=0;k<N;k++) hosts[k].parentNode.classList.remove('zoom');
-    cell.classList.toggle('zoom', on);
-    grid.classList.toggle('zoomed', on);
+    if(i >= state.layout) return;
+    if(zoomIdx === i){ unzoom(); return; }
+    if(zoomIdx >= 0) hosts[zoomIdx].parentNode.classList.remove('zoom');
+    zoomIdx = i;
+    hosts[i].parentNode.classList.add('zoom');
+    grid.classList.add('zoomed');
   }
 
-  /* ---------- 初始化 ---------- */
-  var state = loadState();
+  /* ================= 宫格数 / 模式 ================= */
+  function setLayout(n){
+    if(n !== 4 && n !== 6 && n !== 9) return;
+    commit();
+    state.layout = n;
+    layoutSel.value = String(n);
+    buildInputs();
+    apply(true);
+  }
 
-  for(var i=0;i<N;i++){
+  /* ================= 分组 ================= */
+  function buildGroups(){
+    groupsBox.innerHTML = '';
+    for(var g=0; g<3; g++){
+      (function(g){
+        var b = document.createElement('button');
+        b.textContent = state.groups[g].name;
+        b.title = '切换到' + state.groups[g].name + '(双击重命名)';
+        if(g === state.gi) b.className = 'on';
+        b.addEventListener('click', function(){ switchGroup(g); });
+        b.addEventListener('dblclick', function(){
+          var n = prompt('分组名称', state.groups[g].name);
+          if(n !== null && n.replace(/\s/g,'')){
+            state.groups[g].name = n.slice(0,10);
+            buildGroups(); saveState();
+          }
+        });
+        groupsBox.appendChild(b);
+      })(g);
+    }
+  }
+  function switchGroup(g){
+    if(g === state.gi) return;
+    commit();                 // 先把当前分组的编辑存下来
+    state.gi = g;
+    buildGroups();
+    buildInputs();
+    apply(true);
+  }
+
+  /* ================= 大盘摘要 ================= */
+  var MKT = [
+    {code:'sh000001', name:'上证'},
+    {code:'sz399001', name:'深成'},
+    {code:'sz399006', name:'创业板'}
+  ];
+  var mktFails = 0, mktTimer = null, mktOK = false;
+
+  function paintMarket(){
+    var html = '', got = 0;
+    for(var i=0;i<MKT.length;i++){
+      var raw = window['v_' + MKT[i].code];
+      if(typeof raw !== 'string' || raw.indexOf('~') < 0) continue;
+      var p = raw.split('~');
+      var now = parseFloat(p[3]), prev = parseFloat(p[4]);
+      if(!(now > 0) || !(prev > 0)) continue;
+      var pct = (now - prev) / prev * 100;
+      var cls = pct > 0.005 ? 'up' : (pct < -0.005 ? 'down' : 'flat');
+      html += '<span class="mi"><i>' + MKT[i].name + '</i><b class="' + cls + '">' +
+              now.toFixed(2) + '</b><em class="' + cls + '">' +
+              (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%</em></span>';
+      got++;
+    }
+    if(got){ mktOK = true; marketBox.innerHTML = html; }
+    return got;
+  }
+
+  function fetchMarket(){
+    if(document.hidden) return;
+    var codes = [];
+    for(var i=0;i<MKT.length;i++) codes.push(MKT[i].code);
+    var sc = document.createElement('script');
+    sc.charset = 'gbk';                         // 腾讯行情接口返回 GBK
+    sc.src = 'https://qt.gtimg.cn/q=' + codes.join(',') + '&r=' + Date.now();
+    function done(ok){
+      if(sc.parentNode) sc.parentNode.removeChild(sc);
+      if(ok && paintMarket()) { mktFails = 0; return; }
+      mktFails++;
+      if(mktFails >= 3 && !mktOK){              // 行情源不可用就安静地收起来
+        marketBox.innerHTML = '';
+        if(mktTimer){ clearInterval(mktTimer); mktTimer = null; }
+      }
+    }
+    sc.onload = function(){ done(true); };
+    sc.onerror = function(){ done(false); };
+    document.head.appendChild(sc);
+  }
+
+  function startMarket(){
+    fetchMarket();
+    mktTimer = setInterval(fetchMarket, MKT_MS);
+  }
+
+  /* ================= 初始化 ================= */
+  for(var i=0;i<MAX;i++){
     (function(i){
-      var inp = document.createElement('input');
-      inp.type = 'text';
-      inp.value = state.symbols[i];
-      inp.placeholder = '宫格 ' + (i+1);
-      inp.title = '宫格 ' + (i+1) + ' 的股票代码';
-      inp.setAttribute('list','hints');
-      inp.addEventListener('keydown', function(e){ if(e.key === 'Enter') apply(true); });
-      inputsBox.appendChild(inp);
-      inputs[i] = inp;
-
       var cell = document.createElement('div');
       cell.className = 'cell';
       var host = document.createElement('div');
       host.className = 'host';
+      var idx = document.createElement('span');
+      idx.className = 'idx';
+      idx.textContent = String(i+1);
       var btn = document.createElement('button');
       btn.className = 'zoombtn';
       btn.textContent = '⛶';
-      btn.title = '放大 / 还原此宫格';
+      btn.title = '放大 / 还原此宫格(快捷键 ' + (i+1) + ')';
       btn.addEventListener('click', function(){ toggleZoom(i); });
-      cell.appendChild(host);
-      cell.appendChild(btn);
+      cell.appendChild(host); cell.appendChild(idx); cell.appendChild(btn);
       grid.appendChild(cell);
-      hosts[i] = host;
+      hosts[i] = host; idxTags[i] = idx;
     })(i);
   }
 
+  layoutSel.value = String(state.layout);
+  modeSel.value = state.mode;
   intervalSel.value = state.interval;
   if(!intervalSel.value) intervalSel.value = 'D';
   toolbarChk.checked = state.toolbar;
+  intervalSel.disabled = (state.mode === 'single');
 
-  document.getElementById('apply').addEventListener('click', function(){ apply(true); });
-  intervalSel.addEventListener('change', function(){ apply(true); });
-  toolbarChk.addEventListener('change', function(){ apply(true); });
-  document.getElementById('reset').addEventListener('click', function(){
-    for(var i=0;i<N;i++) inputs[i].value = DEFAULTS[i];
+  buildGroups();
+  buildInputs();
+
+  layoutSel.addEventListener('change', function(){ setLayout(parseInt(layoutSel.value,10)); });
+  modeSel.addEventListener('change', function(){
+    commit();
+    state.mode = modeSel.value === 'single' ? 'single' : 'multi';
+    intervalSel.disabled = (state.mode === 'single');
+    buildInputs();
     apply(true);
   });
-  document.addEventListener('keydown', function(e){
-    if(e.key === 'Escape' && grid.classList.contains('zoomed')){
-      for(var k=0;k<N;k++) hosts[k].parentNode.classList.remove('zoom');
-      grid.classList.remove('zoomed');
-    }
-  });
-  document.addEventListener('visibilitychange', function(){
-    if(document.hidden) return;                  // 切回来立刻补一张最新的分时图
-    for(var k=0;k<N;k++){ if(reloaders[k]) reloaders[k](); }
-  });
-  window.addEventListener('pagehide', function(){
-    for(var k=0;k<N;k++) stopRefresh(k);
+  intervalSel.addEventListener('change', function(){ apply(true); });
+  toolbarChk.addEventListener('change', function(){ apply(true); });
+  document.getElementById('apply').addEventListener('click', function(){ apply(true); });
+  document.getElementById('reset').addEventListener('click', function(){
+    var g = group();
+    g.symbols = DEFAULTS[state.gi].slice();
+    g.single = SINGLE_DEFAULT[state.gi];
+    buildInputs();
+    apply(true);
   });
 
-  apply(false);   // 首次渲染,不覆盖已保存的配置
+  document.addEventListener('keydown', function(e){
+    var t = e.target, tag = t && t.tagName;
+    if(tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;  // 输入时不抢按键
+    if(e.ctrlKey || e.metaKey || e.altKey) return;
+    if(e.key === 'Escape'){ unzoom(); return; }
+    var n = parseInt(e.key, 10);
+    if(n >= 1 && n <= 9){ toggleZoom(n - 1); e.preventDefault(); }
+  });
+
+  document.addEventListener('visibilitychange', function(){
+    if(document.hidden) return;
+    for(var k=0;k<MAX;k++){ if(reloaders[k]) reloaders[k](); }   // 切回来立刻补最新分时图
+    if(mktTimer) fetchMarket();
+  });
+  window.addEventListener('pagehide', function(){
+    for(var k=0;k<MAX;k++) stopRefresh(k);
+    if(mktTimer){ clearInterval(mktTimer); mktTimer = null; }
+  });
+
+  render();
+  updateTip();
+  startMarket();
 })();
 </script>
 </body>
