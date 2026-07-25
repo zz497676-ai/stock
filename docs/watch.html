@@ -34,8 +34,8 @@
   }
   .brand{font-weight:600;letter-spacing:.5px;white-space:nowrap;margin-right:2px}
   .inputs{
-    flex:1 1 520px;min-width:0;
-    display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px;
+    flex:1 1 620px;
+    display:grid;grid-template-columns:repeat(6,minmax(104px,1fr));gap:6px;
   }
   .inputs input{
     width:100%;min-width:0;
@@ -54,7 +54,11 @@
   button:hover,select:hover{border-color:#39415a}
   button.primary:hover{background:#3a78ff}
   label.chk{display:flex;align-items:center;gap:4px;color:var(--muted);white-space:nowrap;cursor:pointer;user-select:none}
-  .tip{color:var(--muted);white-space:nowrap;font-size:12px}
+  .tip{
+    flex:0 1 auto;min-width:0;
+    color:var(--muted);font-size:12px;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
   .tip b{color:#c9d1e0;font-weight:500}
 
   /* ---------- 六宫格 ---------- */
@@ -71,7 +75,7 @@
   .cell .empty{
     width:100%;height:100%;
     display:flex;align-items:center;justify-content:center;
-    color:#4b5364;font-size:12px;
+    color:#4b5364;font-size:12px;text-align:center;padding:0 12px;
   }
   .zoombtn{
     position:absolute;top:4px;right:4px;z-index:5;
@@ -87,14 +91,42 @@
   main.zoomed .cell.zoom{display:block}
   main.zoomed .zoombtn{opacity:1}
 
+  /* ---------- 新浪分时图(A股分钟周期) ---------- */
+  .sina{position:relative;width:100%;height:100%;background:#0f1115}
+  .sina-stage{
+    width:100%;height:100%;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .sina-stage img{width:100%;height:100%;object-fit:contain;display:block}
+  .sina-tag{
+    position:absolute;left:5px;top:5px;z-index:4;
+    display:flex;align-items:center;gap:5px;
+    max-width:calc(100% - 40px);
+    padding:2px 7px;border-radius:4px;
+    background:rgba(11,14,19,.82);border:1px solid rgba(255,255,255,.08);
+    color:var(--muted);font-size:11px;white-space:nowrap;overflow:hidden;
+  }
+  .sina-tag b{color:#e6e9ef;font-weight:600;font-family:ui-monospace,Menlo,Consolas,monospace}
+  .sina-tag .dot{
+    width:6px;height:6px;border-radius:50%;background:#2ecc71;flex:0 0 auto;
+    animation:pulse 2s ease-in-out infinite;
+  }
+  .sina-tag.stale .dot{background:#e0603a;animation:none}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
+  .sina-err{
+    width:100%;height:100%;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;
+    color:#6b7488;font-size:12px;text-align:center;padding:0 14px;
+  }
+
   @media (max-width:1080px){
     main{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:repeat(3,minmax(0,1fr))}
-    .inputs{grid-template-columns:repeat(3,minmax(0,1fr))}
+    .inputs{flex:1 1 320px;grid-template-columns:repeat(3,minmax(84px,1fr))}
   }
   @media (max-width:680px){
     body{overflow:auto}
     main{grid-template-columns:1fr;grid-template-rows:none;grid-auto-rows:62vh}
-    .inputs{grid-template-columns:repeat(2,minmax(0,1fr))}
+    .inputs{flex:1 1 200px;grid-template-columns:repeat(2,minmax(0,1fr))}
     .tip{display:none}
   }
 </style>
@@ -106,7 +138,7 @@
 
   <div class="inputs" id="inputs"></div>
 
-  <select id="interval" title="K线周期">
+  <select id="interval" title="K线周期(A股选分钟周期时自动切换为新浪实时分时图)">
     <option value="1">分时 / 1分</option>
     <option value="5">5分</option>
     <option value="15">15分</option>
@@ -121,7 +153,7 @@
   <label class="chk"><input type="checkbox" id="toolbar"> 工具栏</label>
   <button class="primary" id="apply">应用</button>
   <button id="reset" title="恢复默认代码">重置</button>
-  <span class="tip" id="tip">代码格式:<b>NASDAQ:AAPL</b> / <b>HKEX:700</b> / <b>SSE:600519</b>,纯数字可省略前缀</span>
+  <span class="tip" id="tip" title="代码格式:NASDAQ:AAPL / HKEX:700 / SSE:600519,纯数字可省略前缀。A股选分钟周期时,TradingView 无免费分钟数据,自动改用新浪实时分时图(每5秒刷新)"><b>NASDAQ:AAPL</b> / <b>HKEX:700</b> / <b>SSE:600519</b>,可省前缀</span>
 </header>
 
 <main id="grid"></main>
@@ -148,6 +180,8 @@
   var KEY = 'sixgrid_stock_v1';
   var N = 6;
   var DEFAULTS = ['SSE:000001','SSE:600519','SZSE:300750','HKEX:700','NASDAQ:AAPL','NASDAQ:NVDA'];
+  var SINA_MS = 5000;              // 新浪分时图刷新间隔
+  var MINUTES = ['1','3','5','15','30','60','120','240'];   // 视为“分钟/分时”的周期
 
   var grid = document.getElementById('grid');
   var inputsBox = document.getElementById('inputs');
@@ -158,7 +192,9 @@
   var inputs = [];   // 6 个输入框
   var hosts = [];    // 6 个图表挂载点
   var mounted = [];  // 各宫格当前已渲染的配置指纹,用于跳过无变化的重载
-  var timers = [];   // 错峰加载定时器
+  var mountTimers = [];              // 错峰加载定时器
+  var refreshTimers = new Array(N);  // 各宫格的新浪分时图刷新定时器
+  var reloaders = new Array(N);      // 各宫格的立即刷新函数(标签页重新可见时调用)
 
   /* ---------- 配置读写 ---------- */
   function loadState(){
@@ -201,19 +237,82 @@
     return s;                                    // 其余交给 TradingView 自行解析
   }
 
-  /* ---------- 渲染单个宫格 ---------- */
-  function mount(i, symbol, interval, toolbar){
-    var host = hosts[i];
-    host.innerHTML = '';
+  /* ---------- A 股判定:SSE:600519 -> sh600519 ---------- */
+  var SINA_PREFIX = {SSE:'sh', SZSE:'sz', BSE:'bj'};
+  function sinaCode(symbol){
+    var m = /^(SSE|SZSE|BSE):(\d{6})$/.exec(symbol);
+    return m ? SINA_PREFIX[m[1]] + m[2] : '';
+  }
+  function isMinute(interval){
+    for(var i=0;i<MINUTES.length;i++){ if(MINUTES[i] === interval) return true; }
+    return false;
+  }
 
-    if(!symbol){
-      var ph = document.createElement('div');
-      ph.className = 'empty';
-      ph.textContent = '未设置代码';
-      host.appendChild(ph);
-      return;
+  /* ---------- 定时器清理 ---------- */
+  function stopRefresh(i){
+    if(refreshTimers[i]){ clearInterval(refreshTimers[i]); refreshTimers[i] = null; }
+    reloaders[i] = null;
+  }
+
+  /* ---------- 渲染:新浪实时分时图(A股 + 分钟周期) ---------- */
+  function mountSina(i, host, symbol, code){
+    var url = 'https://image.sinajs.cn/newchart/min/n/' + code + '.gif';
+
+    var wrap = document.createElement('div');
+    wrap.className = 'sina';
+    var stage = document.createElement('div');
+    stage.className = 'sina-stage';
+    var tag = document.createElement('div');
+    tag.className = 'sina-tag';
+    var name = document.createElement('b');
+    name.textContent = symbol;
+    var dot = document.createElement('span');
+    dot.className = 'dot';
+    var stamp = document.createElement('span');
+    stamp.textContent = '新浪分时 · 加载中';
+    tag.appendChild(name); tag.appendChild(dot); tag.appendChild(stamp);
+    wrap.appendChild(stage);
+    wrap.appendChild(tag);
+    host.appendChild(wrap);
+
+    var loaded = false;
+
+    function show(node){
+      while(stage.firstChild) stage.removeChild(stage.firstChild);
+      stage.appendChild(node);
     }
 
+    function load(){
+      if(document.hidden) return;                 // 后台标签页不拉图,省流量和 CPU
+      var img = new Image();
+      img.referrerPolicy = 'no-referrer';         // 避免防盗链拦截
+      img.alt = symbol + ' 分时图';
+      img.onload = function(){
+        loaded = true;
+        show(img);                                // 加载完成再替换,避免刷新时闪白
+        tag.classList.remove('stale');
+        stamp.textContent = '新浪分时 · ' + new Date().toLocaleTimeString('zh-CN',{hour12:false});
+      };
+      img.onerror = function(){
+        tag.classList.add('stale');
+        stamp.textContent = '新浪分时 · 刷新失败,重试中';
+        if(!loaded){                              // 一次都没加载出来才显示错误占位
+          var err = document.createElement('div');
+          err.className = 'sina-err';
+          err.textContent = '分时图加载失败:' + code + ',请检查网络或代码是否正确';
+          show(err);
+        }
+      };
+      img.src = url + '?_=' + Date.now();         // 时间戳防缓存
+    }
+
+    load();
+    refreshTimers[i] = setInterval(load, SINA_MS);
+    reloaders[i] = load;
+  }
+
+  /* ---------- 渲染:TradingView 图表(日/周/月线,以及美股港股全周期) ---------- */
+  function mountTV(host, symbol, interval, toolbar){
     var box = document.createElement('div');
     box.className = 'tradingview-widget-container';
     var slot = document.createElement('div');
@@ -250,6 +349,28 @@
     host.appendChild(box);
   }
 
+  /* ---------- 渲染单个宫格:按“代码 + 周期”选择数据源 ---------- */
+  function mount(i, symbol, interval, toolbar){
+    stopRefresh(i);                 // 先清掉这一格的旧定时器,防止泄漏
+    var host = hosts[i];
+    host.innerHTML = '';
+
+    if(!symbol){
+      var ph = document.createElement('div');
+      ph.className = 'empty';
+      ph.textContent = '未设置代码';
+      host.appendChild(ph);
+      return;
+    }
+
+    var code = sinaCode(symbol);
+    if(code && isMinute(interval)){
+      mountSina(i, host, symbol, code);   // A股分钟周期:TradingView 无免费分钟数据,改用新浪
+    }else{
+      mountTV(host, symbol, interval, toolbar);
+    }
+  }
+
   /* ---------- 应用:只重载发生变化的宫格,并错峰加载 ---------- */
   function apply(save){
     var interval = intervalSel.value;
@@ -264,14 +385,14 @@
       var sig = sym + '|' + interval + '|' + (toolbar?1:0);
       if(mounted[i] !== sig){
         mounted[i] = sig;
-        pending.push({idx:i, sym:sym, sig:sig});
+        pending.push({idx:i, sym:sym});
       }
     }
 
-    timers.forEach(clearTimeout);
-    timers = [];
+    mountTimers.forEach(clearTimeout);
+    mountTimers = [];
     pending.forEach(function(p, k){
-      timers.push(setTimeout(function(){
+      mountTimers.push(setTimeout(function(){
         mount(p.idx, p.sym, interval, toolbar);
       }, k * 150));                      // 逐个加载,避免同时开 6 个 iframe 卡住低配机器
     });
@@ -345,6 +466,13 @@
       for(var k=0;k<N;k++) hosts[k].parentNode.classList.remove('zoom');
       grid.classList.remove('zoomed');
     }
+  });
+  document.addEventListener('visibilitychange', function(){
+    if(document.hidden) return;                  // 切回来立刻补一张最新的分时图
+    for(var k=0;k<N;k++){ if(reloaders[k]) reloaders[k](); }
+  });
+  window.addEventListener('pagehide', function(){
+    for(var k=0;k<N;k++) stopRefresh(k);
   });
 
   apply(false);   // 首次渲染,不覆盖已保存的配置

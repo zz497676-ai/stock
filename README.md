@@ -16,7 +16,8 @@
 
 **https://zz497676-ai.github.io/stock/watch.html** —— 2×3 满屏网格,每格一张 TradingView 暗色 K 线图,
 顶栏填 6 个代码(`SSE:600519` / `HKEX:700` / `NASDAQ:AAPL`,A 股港股可只填数字)并切换周期,
-配置存在浏览器本地,下次打开自动恢复。页面是 [`docs/watch.html`](docs/watch.html) 单文件,
+配置存在浏览器本地,下次打开自动恢复。TradingView 的 A 股免费数据只到日线,所以 A 股选分钟周期时
+自动改用新浪实时分时图(每 5 秒刷新)。页面是 [`docs/watch.html`](docs/watch.html) 单文件,
 下载下来双击也能离线使用(图表本身仍需联网)。
 
 ## 今日动向一图览
