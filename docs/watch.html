@@ -5,164 +5,293 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>多窗盯盘台</title>
 <style>
-  :root{
-    --bg:#0b0e13;
-    --panel:#141821;
-    --line:#232833;
-    --text:#e6e9ef;
-    --muted:#8b93a5;
-    --accent:#2b6cff;
-    --up:#f0503a;
-    --down:#2ecc71;
+  /* =========================================================
+     设计 token(暖炭灰 + 红陶)
+     ========================================================= */
+  :root {
+    --bg: #141312;             /* 主背景:暖深炭灰 */
+    --panel: #1d1c1a;          /* 顶栏面板 */
+    --card: #191817;           /* 宫格卡片背景 */
+    --card-border: #2a2826;    /* 微光边框 */
+    --line: #2e2c29;           /* 分割线 */
+    --text: #edebe8;           /* 主文字:柔暖白 */
+    --muted: #9e9992;          /* 次要文字:暖灰 */
+    --accent: #cc6b49;         /* 品牌色:红陶 */
+    --accent-hover: #e07855;
+    --accent-bg: rgba(204, 107, 73, 0.15);
+    --up: #e5533d;             /* 上涨/买力:红(全页统一红涨绿跌) */
+    --down: #22a06b;           /* 下跌/卖力:绿 */
+    --warn: #d9a441;           /* 警告:琥珀 */
+    --vac: #8fd3e8;            /* 筹码真空区:青 */
+    --radius-sm: 6px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --shadow-sm: 0 2px 8px rgba(0,0,0,0.2);
+    --shadow-md: 0 4px 16px rgba(0,0,0,0.35);
   }
-  *{box-sizing:border-box;margin:0;padding:0}
-  html,body{height:100%}
-  body{
-    background:var(--bg);
-    color:var(--text);
-    font:13px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
-    display:flex;flex-direction:column;
-    height:100vh;height:100dvh;
-    overflow:hidden;
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font: 13px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+    display: flex;
+    flex-direction: column;
+    height: 100vh; height: 100dvh;
+    overflow: hidden;
   }
 
   /* ---------- 顶部控制栏 ---------- */
-  header{
-    flex:0 0 auto;
-    background:var(--panel);
-    border-bottom:1px solid var(--line);
-    padding:7px 10px;
-    display:flex;flex-direction:column;gap:6px;
+  header {
+    flex: 0 0 auto;
+    background: var(--panel);
+    border-bottom: 1px solid var(--card-border);
+    padding: 10px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    box-shadow: var(--shadow-sm);
+    z-index: 10;
   }
-  .row{display:flex;flex-wrap:wrap;align-items:center;gap:8px;min-width:0}
-  .brand{font-weight:600;letter-spacing:.5px;white-space:nowrap}
-  select,button{
-    background:#0e1219;color:var(--text);
-    border:1px solid var(--line);border-radius:5px;
-    padding:6px 10px;font:inherit;cursor:pointer;outline:none;
-  }
-  select:hover,button:hover{border-color:#39415a}
-  select:disabled{opacity:.4;cursor:not-allowed}
-  button.primary{background:var(--accent);border-color:var(--accent);font-weight:600}
-  button.primary:hover{background:#3a78ff}
-  label.chk{display:flex;align-items:center;gap:4px;color:var(--muted);white-space:nowrap;cursor:pointer;user-select:none}
 
-  .seg{display:flex;gap:0;flex:0 0 auto}
-  .seg button{border-radius:0;border-right-width:0;padding:6px 11px;color:var(--muted)}
-  .seg button:first-child{border-radius:5px 0 0 5px}
-  .seg button:last-child{border-radius:0 5px 5px 0;border-right-width:1px}
-  .seg button.on{background:#1d2431;color:var(--text);border-color:#39415a;font-weight:600}
-  .seg button.on+button{border-left-color:#39415a}
+  .row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; min-width: 0; }
+
+  .brand {
+    font-family: "Georgia", "Cambria", "Times New Roman", serif;
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    color: var(--text);
+    white-space: nowrap;
+    margin-right: 6px;
+  }
+
+  select, button {
+    background: #23211f;
+    color: var(--text);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-md);
+    padding: 6px 12px;
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+    outline: none;
+    transition: all 0.15s ease;
+  }
+  select:hover, button:hover { border-color: #423f3b; background: #2a2825; }
+  select:focus, button:focus-visible { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-bg); }
+  select:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 500; }
+  button.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+
+  label.chk {
+    display: flex; align-items: center; gap: 6px;
+    color: var(--muted); font-size: 12px;
+    white-space: nowrap; cursor: pointer; user-select: none;
+  }
+  label.chk input { accent-color: var(--accent); cursor: pointer; }
+
+  /* 胶囊分段器 */
+  .seg {
+    display: flex; gap: 2px;
+    background: #141312;
+    padding: 3px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--card-border);
+  }
+  .seg button { background: transparent; border: none; border-radius: var(--radius-sm); padding: 4px 10px; color: var(--muted); font-size: 12px; }
+  .seg button:hover { color: var(--text); background: rgba(255,255,255,0.04); }
+  .seg button.on { background: #2a2825; color: var(--text); font-weight: 500; box-shadow: 0 1px 3px rgba(0,0,0,0.3); }
 
   /* 大盘摘要 */
-  .market{margin-left:auto;display:flex;gap:14px;align-items:center;white-space:nowrap}
-  .market:empty{display:none}
-  .mi{display:flex;align-items:baseline;gap:5px;font-size:12px}
-  .mi i{color:var(--muted);font-style:normal}
-  .mi b{font-family:ui-monospace,Menlo,Consolas,monospace;font-weight:600}
-  .mi em{font-style:normal;font-size:11px;font-family:ui-monospace,Menlo,Consolas,monospace}
-  .mi .up{color:var(--up)} .mi .down{color:var(--down)} .mi .flat{color:var(--muted)}
+  .market { margin-left: auto; display: flex; gap: 16px; align-items: center; white-space: nowrap; }
+  .market:empty { display: none; }
+  .mi { display: flex; align-items: baseline; gap: 6px; font-size: 12px; }
+  .mi i { color: var(--muted); font-style: normal; font-size: 11px; }
+  .mi b { font-family: ui-monospace, Menlo, Consolas, monospace; font-weight: 600; }
+  .mi em { font-style: normal; font-size: 11px; font-family: ui-monospace, Menlo, Consolas, monospace; }
+  .mi .up { color: var(--up); }
+  .mi .down { color: var(--down); }
+  .mi .flat { color: var(--muted); }
 
   /* 输入区 */
-  .inputs{flex:1 1 auto;min-width:0;display:grid;gap:6px}
-  .inputs.c4{grid-template-columns:repeat(4,minmax(88px,1fr))}
-  .inputs.c6{grid-template-columns:repeat(6,minmax(88px,1fr))}
-  .inputs.c9{grid-template-columns:repeat(9,minmax(80px,1fr))}
-  .inputs.single{grid-template-columns:minmax(180px,260px)}
-  .inputs input{
-    width:100%;min-width:0;
-    background:#0e1219;color:var(--text);
-    border:1px solid var(--line);border-radius:5px;
-    padding:6px 7px;font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
-    outline:none;
+  .inputs { flex: 1 1 auto; min-width: 0; display: grid; gap: 8px; }
+  .inputs.c4 { grid-template-columns: repeat(4, minmax(88px, 1fr)); }
+  .inputs.c6 { grid-template-columns: repeat(6, minmax(88px, 1fr)); }
+  .inputs.c9 { grid-template-columns: repeat(9, minmax(80px, 1fr)); }
+  .inputs.single { grid-template-columns: minmax(180px, 260px); }
+
+  .inputs input {
+    width: 100%; min-width: 0;
+    background: #141312; color: var(--text);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-md);
+    padding: 6px 10px;
+    font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    outline: none;
+    transition: all 0.15s ease;
   }
-  .inputs input:focus{border-color:var(--accent)}
-  .tip{
-    flex:0 1 auto;min-width:0;color:var(--muted);font-size:12px;
-    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  .inputs input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-bg); }
+
+  .tip {
+    flex: 0 1 auto; min-width: 0; color: var(--muted); font-size: 12px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
-  .tip b{color:#c9d1e0;font-weight:500}
-  .tip kbd{
-    font:11px/1 ui-monospace,Menlo,Consolas,monospace;color:#c9d1e0;
-    border:1px solid var(--line);border-bottom-width:2px;border-radius:3px;padding:2px 4px;
+  .tip b { color: var(--text); font-weight: 500; }
+  .tip kbd {
+    font: 11px/1 ui-monospace, Menlo, Consolas, monospace; color: var(--text);
+    background: #23211f; border: 1px solid var(--card-border);
+    border-radius: 4px; padding: 2px 5px;
   }
 
-  /* ---------- 宫格 ---------- */
-  main{
-    flex:1 1 auto;min-height:0;
-    display:grid;gap:1px;background:var(--line);
+  /* ---------- 宫格主体(卡片化) ---------- */
+  main {
+    flex: 1 1 auto; min-height: 0;
+    display: grid; gap: 10px;
+    padding: 10px;
+    background: var(--bg);
   }
-  main.g4{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:repeat(2,minmax(0,1fr))}
-  main.g6{grid-template-columns:repeat(3,minmax(0,1fr));grid-template-rows:repeat(2,minmax(0,1fr))}
-  main.g9{grid-template-columns:repeat(3,minmax(0,1fr));grid-template-rows:repeat(3,minmax(0,1fr))}
+  main.g4 { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(0, 1fr)); }
+  main.g6 { grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(0, 1fr)); }
+  main.g9 { grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: repeat(3, minmax(0, 1fr)); }
   main.g4 .cell:nth-child(n+5),
-  main.g6 .cell:nth-child(n+7){display:none}
+  main.g6 .cell:nth-child(n+7) { display: none; }
 
-  .cell{position:relative;background:#0f1115;min-width:0;min-height:0;overflow:hidden}
-  .cell .host{width:100%;height:100%}
-  .cell .host>div{width:100%;height:100%}
-  .note{
-    width:100%;height:100%;
-    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;
-    color:#5b6376;font-size:12px;text-align:center;padding:0 16px;line-height:1.7;
+  .cell {
+    position: relative;
+    background: var(--card);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-lg);
+    min-width: 0; min-height: 0;
+    overflow: hidden;
+    box-shadow: var(--shadow-sm);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
   }
-  .note button{margin-top:4px;padding:4px 10px;font-size:12px;color:var(--muted)}
-  .note button:hover{color:var(--text)}
-  .idx{
-    position:absolute;left:0;bottom:0;z-index:4;
-    padding:2px 7px;border-radius:0 4px 0 0;
-    background:rgba(11,14,19,.7);
-    color:var(--muted);font-size:11px;font-family:ui-monospace,Menlo,Consolas,monospace;
-    opacity:.45;transition:opacity .15s;pointer-events:none;
-  }
-  .cell:hover .idx{opacity:1}
-  .zoombtn{
-    position:absolute;top:4px;right:4px;z-index:5;
-    width:24px;height:24px;padding:0;line-height:22px;text-align:center;
-    background:rgba(18,22,30,.72);border-color:rgba(255,255,255,.12);
-    color:var(--muted);opacity:0;transition:opacity .15s;font-size:12px;
-  }
-  .cell:hover .zoombtn{opacity:1}
-  .zoombtn:hover{color:#fff}
+  .cell:hover { border-color: #3e3b37; box-shadow: var(--shadow-md); }
+  .cell .host { width: 100%; height: 100%; }
+  .cell .host > div { width: 100%; height: 100%; }
 
-  main.zoomed{grid-template-columns:1fr;grid-template-rows:1fr}
-  main.zoomed .cell{display:none}
-  main.zoomed .cell.zoom{display:block}
-  main.zoomed .zoombtn{opacity:1}
+  .note {
+    width: 100%; height: 100%;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+    color: var(--muted); font-size: 12px; text-align: center; padding: 0 16px; line-height: 1.6;
+  }
+  .note button { margin-top: 6px; }
+
+  .idx {
+    position: absolute; left: 8px; bottom: 8px; z-index: 4;
+    padding: 3px 8px; border-radius: var(--radius-sm);
+    background: rgba(20, 19, 18, 0.85);
+    border: 1px solid rgba(255,255,255,0.06);
+    backdrop-filter: blur(4px);
+    color: var(--muted); font-size: 11px; font-family: ui-monospace, Menlo, Consolas, monospace;
+    opacity: 0.6; transition: opacity 0.15s, bottom 0.15s; pointer-events: none;
+  }
+  .cell:hover .idx { opacity: 1; }
+
+  .zoombtn {
+    position: absolute; top: 8px; right: 8px; z-index: 8;
+    width: 26px; height: 26px; padding: 0; line-height: 24px; text-align: center;
+    background: rgba(20, 19, 18, 0.85); border-color: rgba(255,255,255,0.08);
+    border-radius: var(--radius-sm);
+    backdrop-filter: blur(4px);
+    color: var(--muted); opacity: 0; transition: all 0.15s ease; font-size: 12px;
+  }
+  .cell:hover .zoombtn { opacity: 1; }
+  .zoombtn:hover { color: var(--text); background: var(--accent); border-color: var(--accent); }
+
+  main.zoomed { grid-template-columns: 1fr; grid-template-rows: 1fr; }
+  main.zoomed .cell { display: none; }
+  main.zoomed .cell.zoom { display: block; border-color: var(--accent); }
+  main.zoomed .zoombtn { opacity: 1; }
 
   /* ---------- 新浪分时图 ---------- */
-  .sina{position:relative;width:100%;height:100%;background:#0f1115}
-  .sina-stage{width:100%;height:100%;display:flex;align-items:center;justify-content:center}
-  .sina-stage img{width:100%;height:100%;object-fit:contain;display:block}
-  .sina-tag{
-    position:absolute;left:5px;top:5px;z-index:4;
-    display:flex;align-items:center;gap:5px;
-    max-width:calc(100% - 40px);
-    padding:2px 7px;border-radius:4px;
-    background:rgba(11,14,19,.82);border:1px solid rgba(255,255,255,.08);
-    color:var(--muted);font-size:11px;white-space:nowrap;overflow:hidden;
+  .sina { position: relative; width: 100%; height: 100%; background: var(--card); }
+  .sina-stage { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
+  .sina-stage img { width: 100%; height: 100%; object-fit: contain; display: block; filter: contrast(1.05); }
+  .sina-tag {
+    position: absolute; left: 8px; top: 8px; z-index: 4;
+    display: flex; align-items: center; gap: 6px;
+    max-width: calc(100% - 44px);
+    padding: 3px 8px; border-radius: var(--radius-sm);
+    background: rgba(20, 19, 18, 0.85); border: 1px solid rgba(255,255,255,0.08);
+    backdrop-filter: blur(4px);
+    color: var(--muted); font-size: 11px; white-space: nowrap; overflow: hidden;
+    transition: top 0.15s;
   }
-  .sina-tag b{color:#e6e9ef;font-weight:600;font-family:ui-monospace,Menlo,Consolas,monospace}
-  .sina-tag .dot{
-    width:6px;height:6px;border-radius:50%;background:var(--down);flex:0 0 auto;
-    animation:pulse 2s ease-in-out infinite;
+  .sina-tag b { color: var(--text); font-weight: 600; font-family: ui-monospace, Menlo, Consolas, monospace; }
+  .sina-tag .dot {
+    width: 6px; height: 6px; border-radius: 50%; background: var(--down); flex: 0 0 auto;
+    animation: pulse 2s ease-in-out infinite;
   }
-  .sina-tag.stale .dot{background:var(--up);animation:none}
-  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
+  .sina-tag.stale .dot { background: var(--up); animation: none; }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
 
-  @media (max-width:1080px){
-    main.g4,main.g6,main.g9{
-      grid-template-columns:repeat(2,minmax(0,1fr));
-      grid-template-rows:none;grid-auto-rows:minmax(0,1fr);
-    }
-    .inputs.c6,.inputs.c9{grid-template-columns:repeat(5,minmax(80px,1fr))}
-    .market{display:none}
+  /* ---------- 物理引擎叠加层 ---------- */
+  .phys-bar {
+    position: absolute; left: 0; right: 0; top: 0; z-index: 6;
+    display: flex; align-items: center; gap: 6px;
+    padding: 6px 40px 6px 8px;              /* 右侧留位给放大按钮 */
+    background: linear-gradient(to bottom, rgba(20,19,18,.94) 40%, rgba(20,19,18,0));
+    font-size: 11px; white-space: nowrap; overflow: hidden;
+    pointer-events: none;
   }
-  @media (max-width:680px){
-    body{overflow:auto}
-    main.g4,main.g6,main.g9{grid-template-columns:1fr;grid-auto-rows:62vh}
-    .inputs.c4,.inputs.c6,.inputs.c9{grid-template-columns:repeat(2,minmax(0,1fr))}
-    .tip{display:none}
+  .phys-bar .chip {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 2px 7px; border-radius: var(--radius-sm);
+    background: rgba(20,19,18,.9); border: 1px solid rgba(255,255,255,.08);
+    backdrop-filter: blur(4px);
+    color: var(--muted); pointer-events: auto;
+    min-width: 0; overflow: hidden; text-overflow: ellipsis;
+  }
+  .chip b { font-family: ui-monospace, Menlo, Consolas, monospace; font-weight: 600; }
+  .chip.lowH  { color: #7fd6a8; border-color: rgba(34,160,107,.42); }
+  .chip.midH  { color: #e3b341; border-color: rgba(227,179,65,.38); }
+  .chip.highH { color: #f4907a; border-color: rgba(229,83,61,.48); animation: physPulse 2s ease-in-out infinite; }
+  .chip.up    { color: var(--up); }
+  .chip.down  { color: var(--down); }
+  .chip.flat  { color: var(--muted); }
+  .chip.lvn   { color: var(--vac); border-color: rgba(143,211,232,.35); }
+  .chip.re    { color: var(--warn); border-color: rgba(217,164,65,.5); margin-left: auto; }
+
+  .phys-strip {
+    position: absolute; left: 0; right: 0; bottom: 0; height: 36px; z-index: 3;
+    background: linear-gradient(to top, rgba(20,19,18,.92) 40%, rgba(20,19,18,0));
+    pointer-events: none;
+  }
+  .phys-strip canvas { display: block; width: 100%; height: 100%; }
+
+  .cell.has-phys .idx { bottom: 42px; }
+  .cell.has-phys .sina-tag { top: 40px; }
+
+  .cell.turbulent { border-color: var(--warn); border-style: dashed; animation: turb 2s ease-in-out infinite; }
+
+  @keyframes physPulse { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
+  @keyframes turb {
+    0%, 100% { box-shadow: 0 0 0 rgba(217,164,65,0); }
+    50%      { box-shadow: 0 0 12px rgba(217,164,65,.45); }
+  }
+  /* 同屏多格闪烁会很吵,尊重系统的“减少动态效果” */
+  @media (prefers-reduced-motion: reduce) {
+    .chip.highH, .cell.turbulent, .sina-tag .dot { animation: none; }
+  }
+
+  @media (max-width: 1080px) {
+    main.g4, main.g6, main.g9 {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-rows: none; grid-auto-rows: minmax(0, 1fr);
+    }
+    .inputs.c6, .inputs.c9 { grid-template-columns: repeat(5, minmax(80px, 1fr)); }
+    .market { display: none; }
+  }
+  @media (max-width: 680px) {
+    body { overflow: auto; }
+    main.g4, main.g6, main.g9 { grid-template-columns: 1fr; grid-auto-rows: 62vh; }
+    .inputs.c4, .inputs.c6, .inputs.c9 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .tip { display: none; }
   }
 </style>
 </head>
@@ -198,6 +327,7 @@
     </select>
 
     <label class="chk"><input type="checkbox" id="toolbar"> 工具栏</label>
+    <label class="chk" title="熵 / 净推力 / 加速度 / 筹码真空区 / 湍流度"><input type="checkbox" id="phys"> 物理引擎</label>
     <button class="primary" id="apply">应用</button>
     <button id="reset" title="把当前分组恢复为默认代码">重置</button>
 
@@ -236,6 +366,7 @@
   /* ================= 常量 ================= */
   var KEY = 'stockdesk_v2';          // 本版配置
   var OLD_KEY = 'sixgrid_stock_v1';  // 旧版配置(自动迁移)
+  var SECID_KEY = 'stockdesk_secid'; // 美股 secid 探测结果缓存
   var MAX = 9;                       // 最大宫格数
   var SINA_MS = 5000;                // 分时图刷新间隔
   var MKT_MS = 10000;                // 大盘摘要刷新间隔
@@ -268,6 +399,7 @@
   var modeSel = document.getElementById('mode');
   var intervalSel = document.getElementById('interval');
   var toolbarChk = document.getElementById('toolbar');
+  var physChk = document.getElementById('phys');
   var marketBox = document.getElementById('market');
   var tip = document.getElementById('tip');
 
@@ -278,12 +410,28 @@
   var mountTimers = [];                // 错峰加载定时器
   var refreshTimers = new Array(MAX);  // 分时图刷新定时器
   var reloaders = new Array(MAX);      // 分时图立即刷新函数
+  var physNodes = new Array(MAX);      // 各宫格的物理叠加层
   var zoomIdx = -1;                    // 当前放大的宫格下标
+
+  // canvas 用色跟随 CSS token,改主题不用改 JS
+  var CSSV = getComputedStyle(document.documentElement);
+  function token(n, fb){ return (CSSV.getPropertyValue(n) || '').trim() || fb; }
+  var C_UP = token('--up','#e5533d'), C_DOWN = token('--down','#22a06b'),
+      C_VAC = token('--vac','#8fd3e8'), C_MUTED = token('--muted','#9e9992');
+
+  function throttle(fn, ms){
+    var last = 0, timer = null;
+    return function(){
+      var now = Date.now();
+      if(now - last >= ms){ last = now; fn(); }
+      else if(!timer){ timer = setTimeout(function(){ timer = null; last = Date.now(); fn(); }, ms - (now - last)); }
+    };
+  }
 
   /* ================= 状态 ================= */
   function defState(){
     return {
-      v:2, layout:6, mode:'multi', interval:'D', toolbar:false, gi:0,
+      v:2, layout:6, mode:'multi', interval:'D', toolbar:false, phys:true, gi:0,
       groups:[0,1,2].map(function(g){
         return {name:GROUP_NAMES[g], symbols:DEFAULTS[g].slice(), single:SINGLE_DEFAULT[g]};
       })
@@ -296,6 +444,7 @@
     if(o.mode === 'single' || o.mode === 'multi') s.mode = o.mode;
     if(typeof o.interval === 'string' && o.interval) s.interval = o.interval;
     s.toolbar = !!o.toolbar;
+    if(typeof o.phys === 'boolean') s.phys = o.phys;
     if(typeof o.gi === 'number' && o.gi >= 0 && o.gi < 3) s.gi = o.gi | 0;
     if(Object.prototype.toString.call(o.groups) === '[object Array]'){
       for(var g=0; g<3; g++){
@@ -381,6 +530,541 @@
     return out.slice(0, n);
   }
 
+  /* =========================================================
+     K 线数据层 KlineFeed
+     TradingView 免费嵌入版是跨域 iframe,宿主页读不到 OHLCV,
+     所以物理指标另走东方财富的公开接口(JSONP,绕开 CORS)。
+     ========================================================= */
+  var KlineFeed = (function(){
+    var LMT = 260;          // 覆盖雷诺数的 250 根分位窗口(LVN 要 100、熵要 21)
+    var UT = 'fa5fd1943c7b386f172d6893dbfba10b';
+    var KLT = {'1':'1','5':'5','15':'15','30':'30','60':'60',
+               '120':'60','240':'60',            // 东财没有 2/4 小时 K,降级到 60 分
+               'D':'101','W':'102','M':'103'};
+    // 指数没有统一规律,列已知的;查不到就不显示物理条(尽力而为)
+    var INDEX_SECID = {
+      'SP:SPX':'100.SPX', 'NASDAQ:IXIC':'100.NDX', 'DJ:DJI':'100.DJIA',
+      'HSI:HSI':'100.HSI', 'TVC:HSI':'100.HSI'
+    };
+
+    var seq = 0;
+    var entries = {};       // key(secid|klt) -> {sid,klt,iv,bars,ts,fails,dead,loading,timer,cbs}
+    var subKey = {};        // 订阅者 id -> key
+    var tokens = {};        // 订阅者 id -> 递增令牌(丢弃过期的异步回调)
+    var secidCache = {};
+    try{ secidCache = JSON.parse(localStorage.getItem(SECID_KEY)) || {}; }catch(e){ secidCache = {}; }
+
+    function jsonp(url, cb){
+      var name = '__k' + (++seq), done = false;
+      var sc = document.createElement('script');
+      var timer = setTimeout(function(){ finish(null); }, 8000);
+      function finish(data){
+        if(done) return;
+        done = true;
+        clearTimeout(timer);
+        try{ delete window[name]; }catch(e){ window[name] = undefined; }
+        if(sc.parentNode) sc.parentNode.removeChild(sc);
+        cb(data);
+      }
+      window[name] = function(d){ finish(d); };
+      sc.onerror = function(){ finish(null); };
+      sc.src = url + '&cb=' + name;
+      document.head.appendChild(sc);
+    }
+
+    function pad5(s){ while(s.length < 5) s = '0' + s; return s; }
+
+    /* 美股的交易所前缀(105/106/107)没法从代码推,探测一次并缓存 */
+    function probeUS(ticker, cb){
+      var ids = ['105.'+ticker, '106.'+ticker, '107.'+ticker];
+      jsonp('https://push2.eastmoney.com/api/qt/ulist.np/get?secids=' + ids.join(',') +
+            '&fields=f12,f13,f14&ut=' + UT, function(d){
+        var diff = d && d.data && d.data.diff, list = [], k;
+        if(diff){
+          if(Object.prototype.toString.call(diff) === '[object Array]') list = diff;
+          else for(k in diff) list.push(diff[k]);
+        }
+        for(var i=0;i<list.length;i++){
+          if(list[i] && list[i].f12 === ticker && list[i].f13 !== undefined){
+            var id = list[i].f13 + '.' + ticker;
+            secidCache[ticker] = id;
+            try{ localStorage.setItem(SECID_KEY, JSON.stringify(secidCache)); }catch(e){}
+            return cb(id);
+          }
+        }
+        cb('');
+      });
+    }
+
+    function resolve(symbol, cb){
+      var m = /^(SSE|SZSE|BSE):(\d{6})$/.exec(symbol || '');
+      if(m) return cb((m[1] === 'SSE' ? '1.' : '0.') + m[2]);   // 沪 1,深/北 0
+      m = /^HKEX:(\d{1,5})$/.exec(symbol || '');
+      if(m) return cb('116.' + pad5(m[1]));
+      if(INDEX_SECID[symbol]) return cb(INDEX_SECID[symbol]);
+      m = /^(NASDAQ|NYSE|AMEX|BATS|ARCA):([A-Z0-9.\-]+)$/.exec(symbol || '');
+      if(m){
+        var t = m[2];
+        if(secidCache[t]) return cb(secidCache[t]);
+        return probeUS(t, cb);
+      }
+      cb('');
+    }
+
+    function ttl(iv){ return (iv === 'D' || iv === 'W' || iv === 'M') ? 300000 : 30000; }
+
+    function parse(d){
+      var k = d && d.data && d.data.klines;
+      if(!k || !k.length) return null;
+      var out = [];
+      for(var i=0;i<k.length;i++){
+        // 东财 fields2 顺序:日期,开,收,高,低,量,额 —— 注意“收”在“高/低”之前
+        var p = String(k[i]).split(',');
+        var c = parseFloat(p[2]), h = parseFloat(p[3]), l = parseFloat(p[4]);
+        if(!isFinite(c) || !isFinite(h) || !isFinite(l)) continue;
+        out.push({t:p[0], o:parseFloat(p[1])||c, c:c, h:h, l:l, v:parseFloat(p[5])||0});
+      }
+      return out.length ? out : null;
+    }
+
+    function emit(e, bars, err){
+      var ids = [], id;
+      for(id in e.cbs) ids.push(id);           // 先快照:回调里可能会退订
+      for(var i=0;i<ids.length;i++){
+        var fn = e.cbs[ids[i]];
+        if(fn) fn(bars, err);
+      }
+    }
+
+    function pull(key){
+      var e = entries[key];
+      if(!e || e.dead || e.loading) return;
+      e.loading = true;
+      var url = 'https://push2his.eastmoney.com/api/qt/stock/kline/get' +
+                '?secid=' + e.sid + '&klt=' + e.klt + '&fqt=1&lmt=' + LMT +
+                '&end=20500101&ut=' + UT +
+                '&fields1=f1,f2,f3,f4,f5&fields2=f51,f52,f53,f54,f55,f56,f57';
+      jsonp(url, function(d){
+        e.loading = false;
+        var bars = parse(d);
+        if(bars){
+          e.bars = bars; e.ts = Date.now(); e.fails = 0;
+          emit(e, bars, null);
+          return;
+        }
+        e.fails++;
+        if(e.fails >= 3){                       // 连续 3 次拿不到就判死,不再骚扰接口
+          e.dead = true;
+          if(e.timer){ clearInterval(e.timer); e.timer = null; }
+          emit(e, null, 'dead');
+        }
+      });
+    }
+
+    function unsubscribe(id){
+      tokens[id] = (tokens[id] || 0) + 1;       // 让在途的异步回调失效
+      var key = subKey[id];
+      if(!key) return;
+      delete subKey[id];
+      var e = entries[key];
+      if(!e) return;
+      delete e.cbs[id];
+      for(var k in e.cbs) return;               // 还有别的订阅者就留着定时器
+      if(e.timer){ clearInterval(e.timer); e.timer = null; }
+    }
+
+    function subscribe(id, symbol, interval, onData){
+      unsubscribe(id);
+      var my = tokens[id];
+      var klt = KLT[interval];
+      if(!klt){ onData(null, 'unsupported'); return; }
+      resolve(symbol, function(sid){
+        if(tokens[id] !== my) return;           // 期间已被换掉
+        if(!sid){ onData(null, 'nosecid'); return; }
+        var key = sid + '|' + klt;
+        var e = entries[key];
+        if(!e){
+          e = entries[key] = {sid:sid, klt:klt, iv:interval, bars:null, ts:0,
+                              fails:0, dead:false, loading:false, timer:null, cbs:{}};
+        }
+        e.cbs[id] = onData;
+        subKey[id] = key;
+        if(e.dead){ onData(null, 'dead'); return; }
+        if(e.bars && Date.now() - e.ts < ttl(interval)) onData(e.bars, null);
+        else pull(key);
+        if(!e.timer){
+          e.timer = setInterval(function(){
+            if(!document.hidden) pull(key);     // 后台标签页不拉数据
+          }, ttl(interval));
+        }
+      });
+    }
+
+    function refreshAll(){ for(var k in entries){ if(!entries[k].dead) pull(k); } }
+    function stopAll(){
+      for(var k in entries){
+        if(entries[k].timer){ clearInterval(entries[k].timer); entries[k].timer = null; }
+      }
+    }
+
+    return {subscribe:subscribe, unsubscribe:unsubscribe, refreshAll:refreshAll, stopAll:stopAll};
+  })();
+
+  /* =========================================================
+     PhysicsEngine —— 纯函数,输入 K 线数组,输出指标 JSON
+     注:这几个量是借物理名词命名的启发式指标,不是流体力学/牛顿力学量。
+     ========================================================= */
+  var PhysicsEngine = (function(){
+    function log2(x){ return Math.log(x) / Math.LN2; }
+
+    /* 1. 熵值:近 20 根 K 线涨跌方向的香农熵
+       归一化除以 log2(k),k = 实际出现的状态数。
+       若按需求原文固定除 log2(3):价格连续时“平”几乎不出现,只有 2 态,
+       H 上限被锁死在 0.63,H>0.7 的红档永远不可达。
+       副作用:混入一根平盘会让分母从 1 跳到 1.585,数值有跳变,但档位基本不翻转。 */
+    function entropy(bars){
+      var n = Math.min(20, bars.length - 1);          // 20 个方向需要 21 根收盘价
+      if(n < 5) return null;
+      var start = bars.length - n - 1;
+      var up = 0, dn = 0, fl = 0, changes = 0, prev = null;
+      for(var i = start + 1; i < bars.length; i++){
+        var d = bars[i].c - bars[i-1].c;
+        var dir = d > 0 ? 1 : (d < 0 ? -1 : 0);
+        if(dir > 0) up++; else if(dir < 0) dn++; else fl++;
+        if(prev !== null && dir !== prev) changes++;
+        prev = dir;
+      }
+      var counts = [up, dn, fl], k = 0, H = 0;
+      for(var j=0;j<3;j++){
+        if(counts[j] > 0){ k++; var p = counts[j] / n; H -= p * log2(p); }
+      }
+      var Hn = k < 2 ? 0 : H / log2(k);
+      var runRatio = n > 1 ? changes / (n - 1) : 0;   // 方向翻转频率,用来区分“规则震荡”与“混沌”
+      var level = Hn < 0.4 ? 'low' : (Hn <= 0.7 ? 'mid' : 'high');
+      var label, icon;
+      if(level === 'low'){ icon = '🟢'; label = '低熵 · 强趋势'; }
+      else if(level === 'mid'){ icon = '🟡'; label = '中熵 · 弱震荡'; }
+      else { icon = '🔴'; label = runRatio >= 0.75 ? '高熵 · 规则震荡(箱体)' : '高熵 · 混沌,禁止追突破'; }
+      return {H:Hn, k:k, runRatio:runRatio, level:level, label:label, icon:icon,
+              up:up, down:dn, flat:fl};
+    }
+
+    /* 2. 有效作用力 F = Volume × [(C-L)/(H-L) - (H-C)/(H-L)]
+       = Volume × (2C-H-L)/(H-L)。一字板 H==L 时直接取 0,避免除零。
+       只是由 OHLCV 估算的收盘位置加权量,不是真实主动买卖单。 */
+    function forceOf(b){
+      var range = b.h - b.l;
+      if(!(range > 0)) return 0;
+      return b.v * (2 * b.c - b.h - b.l) / range;
+    }
+    function force(bars){
+      var n = Math.min(40, bars.length), series = [], scale = 0;
+      for(var i = bars.length - n; i < bars.length; i++){
+        var f = forceOf(bars[i]);
+        series.push(f);
+        if(Math.abs(f) > scale) scale = Math.abs(f);
+      }
+      return {F:series[series.length-1], series:series, scale:scale || 1};
+    }
+
+    /* 3. 加速度 a = P_t - 2P_{t-1} + P_{t-2}(二阶差分)
+       原式得到的是“元”,UI 要显示百分比,故除以 P_{t-2} 归一化。
+       K 线是离散等间隔序列,单位是 %/根²,不是 %/s²。 */
+    function accel(bars){
+      var n = bars.length;
+      if(n < 3) return null;
+      var c0 = bars[n-3].c, c1 = bars[n-2].c, c2 = bars[n-1].c;
+      if(!(c0 > 0)) return null;
+      var a = (c2 - 2 * c1 + c0) / c0 * 100;
+      var level, label, icon;
+      if(a > 0.5){ level = 'up'; icon = '🚀'; label = '极速向上'; }
+      else if(a > 0.2){ level = 'up'; icon = '↗'; label = '缓涨'; }
+      else if(a >= -0.2){ level = 'flat'; icon = '➔'; label = '匀速/减速'; }
+      else if(a >= -0.5){ level = 'down'; icon = '↘'; label = '缓跌'; }
+      else { level = 'down'; icon = '📉'; label = '自由落体'; }
+      return {aPct:a, level:level, label:label, icon:icon};
+    }
+
+    /* 4. 势垒真空区 LVN:近 100 根的成交量分布切 20 个价格 bin,
+       量 < 均值 30% 的 bin 为真空。
+       两处修正:
+       - 首尾 bin 天然低量,直接排除,并要求上下两侧都存在 ≥ 均值的密集 bin
+         (真空区必须是“谷”,不能是分布的尾巴);
+       - 单根 K 线的量按其 High~Low 跨越的 bin 均摊,比只记典型价更接近真实分布。 */
+    function lvn(bars, price){
+      var n = Math.min(100, bars.length);
+      if(n < 20) return null;
+      var seg = bars.slice(bars.length - n);
+      var lo = Infinity, hi = -Infinity, i, j;
+      for(i=0;i<n;i++){
+        if(seg[i].l < lo) lo = seg[i].l;
+        if(seg[i].h > hi) hi = seg[i].h;
+      }
+      if(!(hi > lo)) return null;
+
+      var B = 20, w = (hi - lo) / B, bins = [], total = 0;
+      for(i=0;i<B;i++) bins.push(0);
+      for(i=0;i<n;i++){
+        var a = Math.floor((seg[i].l - lo) / w), b = Math.floor((seg[i].h - lo) / w);
+        if(a < 0) a = 0; if(a > B-1) a = B-1;
+        if(b < 0) b = 0; if(b > B-1) b = B-1;
+        if(b < a){ var t = a; a = b; b = t; }
+        var share = seg[i].v / (b - a + 1);
+        for(j=a;j<=b;j++){ bins[j] += share; total += share; }
+      }
+      var mean = total / B;
+      if(!(mean > 0)) return null;
+
+      var vac = [];
+      for(i=0;i<B;i++){
+        if(i === 0 || i === B-1){ vac.push(false); continue; }      // 排除首尾 bin
+        if(!(bins[i] < mean * 0.3)){ vac.push(false); continue; }
+        var below = false, above = false;
+        for(j=0;j<i;j++) if(bins[j] >= mean){ below = true; break; }
+        for(j=i+1;j<B;j++) if(bins[j] >= mean){ above = true; break; }
+        vac.push(below && above);                                    // 必须被两侧密集区夹住
+      }
+
+      var zones = [], s = -1;                                        // 相邻真空 bin 合并成区间
+      for(i=0;i<B;i++){
+        if(vac[i]){ if(s < 0) s = i; }
+        else if(s >= 0){ zones.push({lo:lo + s*w, hi:lo + i*w}); s = -1; }
+      }
+      if(s >= 0) zones.push({lo:lo + s*w, hi:lo + B*w});
+
+      var near = null, best = Infinity;                              // 当前价距真空区 < 0.5%
+      for(i=0;i<zones.length;i++){
+        var z = zones[i], dist;
+        if(price < z.lo) dist = (z.lo - price) / price;
+        else if(price > z.hi) dist = (price - z.hi) / price;
+        else dist = 0;
+        if(dist <= 0.005 && dist < best){ best = dist; near = z; }
+      }
+      return {bins:bins, mean:mean, vac:vac, zones:zones, near:near, lo:lo, hi:hi};
+    }
+
+    /* 5. 雷诺数 Re = (Volume/AvgVolume) × |ΔP/P| × 100
+       ΔP/P 按百分数代入:取小数的话 2 倍量 + 0.4% 波动只有 Re=0.8,阈值 80 永远触发不了。
+       阈值不用固定 80(1 分钟线常态触发、日线几乎不触发),改成近 250 根的 95 分位,自校准。
+       名字是借喻,实质是“相对量 × 相对波幅”。 */
+    function reynolds(bars){
+      var n = bars.length;
+      if(n < 22) return null;
+      var pre = [0], i;
+      for(i=0;i<n;i++) pre.push(pre[i] + bars[i].v);
+      function reAt(i){
+        var b = bars[i], p = bars[i-1];
+        if(!(p.c > 0) || i < 20) return 0;
+        var avg = (pre[i] - pre[i-20]) / 20;
+        if(!(avg > 0)) return 0;
+        var r = Math.abs(b.c - p.c) / p.c * 100;
+        return (b.v / avg) * r * 100;
+      }
+      var Re = reAt(n-1);
+      var arr = [], from = Math.max(20, n - 250);
+      for(i = from; i < n; i++) arr.push(reAt(i));
+      var threshold = 80, dyn = false;
+      if(arr.length >= 60){
+        arr.sort(function(a,b){ return a - b; });
+        threshold = arr[Math.floor(arr.length * 0.95)];
+        dyn = true;
+      }
+      return {Re:Re, threshold:threshold, dyn:dyn, alert:Re > threshold};
+    }
+
+    function compute(bars){
+      if(!bars || bars.length < 3) return {ok:false};
+      var price = bars[bars.length-1].c;
+      return {
+        ok: true,
+        price: price,
+        entropy: entropy(bars),
+        force: force(bars),
+        accel: accel(bars),
+        lvn: lvn(bars, price),
+        re: reynolds(bars)
+      };
+    }
+
+    return {compute:compute, _forceOf:forceOf};
+  })();
+
+  /* =========================================================
+     物理叠加层:顶栏徽章 + 底部 canvas(推力柱 + 迷你筹码分布)
+     TradingView 是跨域 iframe,画不进去,所以全部画在我们自己的 DOM 上。
+     ========================================================= */
+  function chip(cls, text, title){
+    var s = document.createElement('span');
+    s.className = 'chip ' + cls;
+    s.textContent = text;
+    if(title) s.title = title;
+    return s;
+  }
+
+  function paintBar(i, r){
+    var p = physNodes[i];
+    if(!p) return;
+    var bar = p.bar;
+    var cell = hosts[i].parentNode;
+    var w = cell.clientWidth || 0;
+    // 9 宫格的小格子塞不下四个徽章,按重要性降级:湍流告警 > 熵 > 加速度 > 真空区。
+    // 被砍掉的信息不会丢:真空区在底部 canvas 上仍以青色高亮带呈现,完整文案在 title 里。
+    var wide = w >= 500, roomy = w >= 320;
+    bar.innerHTML = '';
+
+    if(r.entropy){
+      var e = r.entropy;
+      bar.appendChild(chip(e.level + 'H',
+        e.icon + ' ' + (wide ? e.label + ' ' : '') + 'H ' + e.H.toFixed(2),
+        e.label + '\n近20根方向的香农熵,按实际出现的状态数归一化\n涨' + e.up + ' 跌' + e.down + ' 平' + e.flat +
+        '\n方向翻转率 ' + (e.runRatio*100).toFixed(0) + '%'));
+    }
+    if(r.accel && roomy){
+      var a = r.accel;
+      bar.appendChild(chip(a.level,
+        a.icon + ' ' + (wide ? a.label + ' ' : '') + (a.aPct >= 0 ? '+' : '') + a.aPct.toFixed(2) + '%/根²',
+        a.label + '\n价格二阶差分 (C_t - 2C_{t-1} + C_{t-2}) / C_{t-2}\nK线是离散序列,单位是每根²,不是每秒²'));
+    }
+    if(r.lvn && r.lvn.near && wide){
+      var z = r.lvn.near;
+      bar.appendChild(chip('lvn',
+        '✨ 真空区 ' + z.lo.toFixed(2) + '~' + z.hi.toFixed(2),
+        '近100根筹码分布里成交量不足均值30%的价格带(低阻力加速段)'));
+    }
+    if(r.re && r.re.alert){
+      bar.appendChild(chip('re',
+        '⚠️ Re ' + r.re.Re.toFixed(0) + (wide ? ' (阈值 ' + r.re.threshold.toFixed(0) + (r.re.dyn ? ' · p95' : '') + ')' : ''),
+        '雷诺数 ' + r.re.Re.toFixed(0) + ' / 阈值 ' + r.re.threshold.toFixed(0) + (r.re.dyn ? '(近250根95分位)' : '(默认)') +
+        '\n借喻:相对量 × 相对波幅,高值意味着高滑点与插针风险'));
+    }
+
+    if(r.re && r.re.alert) cell.classList.add('turbulent');
+    else cell.classList.remove('turbulent');
+  }
+
+  function paintCanvas(i, r){
+    var p = physNodes[i];
+    if(!p) return;
+    var cv = p.cv;
+    var w = Math.floor(p.strip.clientWidth), h = Math.floor(p.strip.clientHeight);
+    if(w < 40 || h < 16) return;                       // 隐藏或过小时不画
+    var dpr = window.devicePixelRatio || 1;
+    if(cv.width !== Math.floor(w*dpr) || cv.height !== Math.floor(h*dpr)){
+      cv.width = Math.floor(w*dpr); cv.height = Math.floor(h*dpr);
+    }
+    var g = cv.getContext('2d');
+    if(!g) return;
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    g.clearRect(0, 0, w, h);
+
+    var vpW = Math.min(66, Math.floor(w * 0.28));      // 右侧留给迷你筹码分布
+    var fW = w - vpW - 8;
+
+    // --- 左:净推力 F 柱状图(F>0 红 / F<0 绿,与全页红涨绿跌一致)
+    if(r.force && fW > 24){
+      var s = r.force.series, sc = r.force.scale || 1;
+      var mid = h / 2, bw = fW / s.length;
+      g.strokeStyle = 'rgba(255,255,255,.10)';
+      g.beginPath(); g.moveTo(0, mid); g.lineTo(fW, mid); g.stroke();
+      for(var k=0;k<s.length;k++){
+        var v = s[k] / sc;
+        var bh = Math.abs(v) * (mid - 2);
+        if(bh < 0.7) bh = 0.7;
+        g.fillStyle = s[k] >= 0 ? C_UP : C_DOWN;
+        g.globalAlpha = k === s.length - 1 ? 1 : 0.62;
+        g.fillRect(k * bw, v >= 0 ? mid - bh : mid, Math.max(1, bw - 1), bh);
+      }
+      g.globalAlpha = 1;
+    }
+
+    // --- 右:迷你筹码分布,真空区高亮 + 当前价横线
+    if(r.lvn && vpW > 14){
+      var L = r.lvn, x0 = w - vpW, B = L.bins.length;
+      g.strokeStyle = 'rgba(255,255,255,.07)';       // 与推力柱区隔开
+      g.beginPath(); g.moveTo(x0 - 4, 2); g.lineTo(x0 - 4, h - 2); g.stroke();
+      var maxB = 0, j;
+      for(j=0;j<B;j++) if(L.bins[j] > maxB) maxB = L.bins[j];
+      if(maxB > 0){
+        var bh2 = h / B;
+        for(j=0;j<B;j++){
+          var y = h - (j + 1) * bh2;                   // 低价在下,高价在上
+          if(L.vac[j]){
+            g.fillStyle = C_VAC; g.globalAlpha = 0.16;
+            g.fillRect(x0, y, vpW, bh2);
+          }
+          var len = (L.bins[j] / maxB) * (vpW - 2);
+          g.globalAlpha = L.vac[j] ? 0.85 : 0.42;
+          g.fillStyle = L.vac[j] ? C_VAC : C_MUTED;
+          g.fillRect(x0, y + bh2 * 0.15, Math.max(0.6, len), Math.max(0.8, bh2 * 0.7));
+        }
+        g.globalAlpha = 1;
+        var span = L.hi - L.lo;
+        if(span > 0){
+          var py = h - ((r.price - L.lo) / span) * h;
+          if(py >= 0 && py <= h){
+            g.strokeStyle = 'rgba(237,235,232,.75)';
+            g.setLineDash([2,2]);
+            g.beginPath(); g.moveTo(x0, py); g.lineTo(w, py); g.stroke();
+            g.setLineDash([]);
+          }
+        }
+      }
+    }
+  }
+
+  /* DOM 等拿到第一份数据再建:接口不通时不要在每个格子上挂两条空带子 */
+  function buildPhysDom(i, node, cell){
+    node.bar = document.createElement('div');
+    node.bar.className = 'phys-bar';
+    node.strip = document.createElement('div');
+    node.strip.className = 'phys-strip';
+    node.cv = document.createElement('canvas');
+    node.strip.appendChild(node.cv);
+    cell.appendChild(node.bar);
+    cell.appendChild(node.strip);
+    cell.classList.add('has-phys');
+
+    if(window.ResizeObserver){                    // 尺寸变化(放大/切宫格数)时重绘,不跑动画循环
+      node.ro = new ResizeObserver(throttle(function(){
+        if(physNodes[i] !== node || !node.data) return;
+        paintBar(i, node.data);                   // 宽度变了要重排徽章
+        paintCanvas(i, node.data);
+      }, 200));
+      node.ro.observe(cell);
+    }
+  }
+
+  function physAttach(i, symbol, interval){
+    if(!state.phys) return;
+    physDetach(i);
+    var cell = hosts[i].parentNode;
+    var node = physNodes[i] = {bar:null, strip:null, cv:null, data:null, ro:null};
+
+    KlineFeed.subscribe('c' + i, symbol, interval, function(bars){
+      if(physNodes[i] !== node) return;
+      if(!bars){ physDetach(i); return; }         // 拿不到数据就整条收起,不影响看盘
+      var r = PhysicsEngine.compute(bars);
+      if(!r.ok){ physDetach(i); return; }
+      if(!node.bar) buildPhysDom(i, node, cell);
+      node.data = r;
+      paintBar(i, r);
+      paintCanvas(i, r);
+    });
+  }
+
+  function physDetach(i){
+    KlineFeed.unsubscribe('c' + i);
+    var p = physNodes[i];
+    physNodes[i] = null;
+    if(!p) return;
+    if(p.ro) p.ro.disconnect();
+    if(p.bar && p.bar.parentNode) p.bar.parentNode.removeChild(p.bar);
+    if(p.strip && p.strip.parentNode) p.strip.parentNode.removeChild(p.strip);
+    var cell = hosts[i].parentNode;
+    cell.classList.remove('has-phys');
+    cell.classList.remove('turbulent');
+  }
+
   /* ================= 渲染:定时器清理 ================= */
   function stopRefresh(i){
     if(refreshTimers[i]){ clearInterval(refreshTimers[i]); refreshTimers[i] = null; }
@@ -463,8 +1147,8 @@
       theme: 'dark',
       style: '1',
       locale: 'zh_CN',
-      backgroundColor: 'rgba(15,17,21,1)',
-      gridColor: 'rgba(120,123,134,0.10)',
+      backgroundColor: '#191817',
+      gridColor: 'rgba(255, 255, 255, 0.03)',
       hide_top_toolbar: !state.toolbar,
       hide_side_toolbar: true,
       hide_legend: false,
@@ -479,9 +1163,10 @@
     host.appendChild(box);
   }
 
-  /* ================= 渲染:按“代码 + 周期”选择数据源 ================= */
+  /* ================= 渲染单个宫格:按“代码 + 周期”选择数据源 ================= */
   function mount(i, symbol, interval){
     stopRefresh(i);                       // 先清掉这一格的旧定时器,防止泄漏
+    physDetach(i);
     var host = hosts[i];
     host.innerHTML = '';
 
@@ -506,6 +1191,7 @@
     }else{
       mountTV(host, symbol, interval);
     }
+    physAttach(i, symbol, interval);
   }
 
   function note(){
@@ -521,6 +1207,7 @@
 
   function unmount(i){
     stopRefresh(i);
+    physDetach(i);
     hosts[i].innerHTML = '';
     mounted[i] = null;
   }
@@ -542,12 +1229,22 @@
     grid.className = 'g' + state.layout + (zoomIdx >= 0 ? ' zoomed' : '');
     if(zoomIdx >= state.layout) unzoom();
 
-    var p = plan(), pending = [], i;
+    var i;
+    // 先取消上一轮还没执行的挂载,并把它们的指纹回滚。
+    // 否则:指纹在排队时就写好了,挂载却被取消,下一轮会误判“无变化”而永久跳过这些格子。
+    for(i=0;i<mountTimers.length;i++){
+      clearTimeout(mountTimers[i].id);
+      if(!mountTimers[i].done) mounted[mountTimers[i].idx] = null;
+    }
+    mountTimers = [];
+
+    var p = plan(), pending = [];
     for(i=0;i<MAX;i++){
       if(i >= state.layout){
         if(mounted[i]) unmount(i);        // 超出当前宫格数的,彻底卸载不留 iframe
         continue;
       }
+      // 物理引擎开关不进指纹:它只是叠加层,不该害得 9 个 iframe 重新加载一遍
       var sig = p[i].sym + '|' + p[i].iv + '|' + (state.toolbar?1:0) + '|' + state.mode;
       idxTags[i].textContent = (i+1) + (state.mode === 'single' && p[i].iv ? ' · ' + IV_LABEL[p[i].iv] : '');
       if(mounted[i] !== sig){
@@ -556,13 +1253,25 @@
       }
     }
 
-    for(i=0;i<mountTimers.length;i++) clearTimeout(mountTimers[i]);
-    mountTimers = [];
     for(i=0;i<pending.length;i++){
-      (function(x, k){
-        mountTimers.push(setTimeout(function(){ mount(x.i, x.sym, x.iv); }, k * MOUNT_GAP));
-      })(pending[i], i);                  // 逐个加载,避免同时开一堆 iframe 卡住低配机器
+      (function(x, k){                    // 逐个加载,避免同时开一堆 iframe 卡住低配机器
+        var mt = {idx:x.i, done:false, id:0};
+        mt.id = setTimeout(function(){ mt.done = true; mount(x.i, x.sym, x.iv); }, k * MOUNT_GAP);
+        mountTimers.push(mt);
+      })(pending[i], i);
     }
+  }
+
+  /* 物理引擎开关:只挂/摘叠加层,不动图表本身 */
+  function physToggle(){
+    state.phys = physChk.checked;
+    var p = plan();
+    for(var i=0;i<MAX;i++){
+      physDetach(i);
+      if(state.phys && i < state.layout && p[i].sym && p[i].iv) physAttach(i, p[i].sym, p[i].iv);
+    }
+    if(!state.phys) KlineFeed.stopAll();
+    flash(saveState() ? (state.phys ? '物理引擎已开启' : '物理引擎已关闭') : '无法保存到本地存储');
   }
 
   /* ================= 输入框 ================= */
@@ -603,6 +1312,7 @@
     var g = group();
     state.interval = intervalSel.value || 'D';
     state.toolbar = toolbarChk.checked;
+    state.phys = physChk.checked;
     if(state.mode === 'single'){
       if(inputs[0]){ var v = normalize(inputs[0].value); inputs[0].value = v; g.single = v; }
     }else{
@@ -618,7 +1328,7 @@
     commit();
     render();
     updateTip();
-    if(save) flash(saveState() ? '已保存,下次打开自动恢复' : '浏览器禁用了本地存储,本次设置不会保留');
+    if(save) flash(saveState() ? '配置已保存在本地' : '无法保存到本地存储');
   }
 
   /* ================= 提示条 ================= */
@@ -627,10 +1337,10 @@
     if(state.mode === 'single'){
       var ps = singlePeriods(group().single, state.layout), names = [];
       for(var i=0;i<ps.length;i++) names.push(ps[i] ? IV_LABEL[ps[i]] : '—');
-      tipBase = '各宫格周期:<b>' + names.join(' / ') + '</b> · 数字键 <kbd>1</kbd>~<kbd>' +
+      tipBase = '各宫格周期:<b>' + names.join(' / ') + '</b> · 按 <kbd>1</kbd>~<kbd>' +
                 state.layout + '</kbd> 放大,<kbd>Esc</kbd> 还原';
     }else{
-      tipBase = '代码可省前缀(<b>600519</b> / <b>700</b>) · 数字键 <kbd>1</kbd>~<kbd>' +
+      tipBase = '代码可省前缀(<b>600519</b> / <b>700</b>) · 按 <kbd>1</kbd>~<kbd>' +
                 state.layout + '</kbd> 放大,<kbd>Esc</kbd> 还原 · 双击分组名可重命名';
     }
     clearTimeout(tipTimer);
@@ -658,7 +1368,7 @@
     grid.classList.add('zoomed');
   }
 
-  /* ================= 宫格数 / 模式 ================= */
+  /* ================= 宫格数 ================= */
   function setLayout(n){
     if(n !== 4 && n !== 6 && n !== 9) return;
     commit();
@@ -777,6 +1487,7 @@
   intervalSel.value = state.interval;
   if(!intervalSel.value) intervalSel.value = 'D';
   toolbarChk.checked = state.toolbar;
+  physChk.checked = state.phys;
   intervalSel.disabled = (state.mode === 'single');
 
   buildGroups();
@@ -792,6 +1503,7 @@
   });
   intervalSel.addEventListener('change', function(){ apply(true); });
   toolbarChk.addEventListener('change', function(){ apply(true); });
+  physChk.addEventListener('change', physToggle);
   document.getElementById('apply').addEventListener('click', function(){ apply(true); });
   document.getElementById('reset').addEventListener('click', function(){
     var g = group();
@@ -814,11 +1526,16 @@
     if(document.hidden) return;
     for(var k=0;k<MAX;k++){ if(reloaders[k]) reloaders[k](); }   // 切回来立刻补最新分时图
     if(mktTimer) fetchMarket();
+    KlineFeed.refreshAll();
   });
   window.addEventListener('pagehide', function(){
-    for(var k=0;k<MAX;k++) stopRefresh(k);
+    for(var k=0;k<MAX;k++){ stopRefresh(k); physDetach(k); }
     if(mktTimer){ clearInterval(mktTimer); mktTimer = null; }
+    KlineFeed.stopAll();
   });
+
+  // 暴露给离线自测用(注入合成 K 线校验纯函数与渲染)
+  window.__desk = {PhysicsEngine:PhysicsEngine, physNodes:function(){ return physNodes; }};
 
   render();
   updateTip();
