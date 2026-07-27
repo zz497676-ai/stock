@@ -103,6 +103,56 @@ temperature:
     - {max: 80, label: "偏热"}
     - {max: 100, label: "过热"}
 
+# 事件提醒(spec: specs/event-reminder.md)
+# 判定逻辑见 src/event_watch.py;改动任何一条规则后必须跑 python src/event_watch.py --self-test
+event_reminders:
+  state_file: "event_alerts.json"   # 落在 data_dir 下,用于跨"无记忆的定时会话"去重
+  events:
+    - key: "politburo_2026h2"
+      name: "中央政治局会议(部署下半年经济工作)"
+      # 给定时会话用的搜索词,按顺序试
+      queries:
+        - "中共中央政治局召开会议 分析研究当前经济形势和经济工作"
+        - "政治局会议 下半年经济工作 新华社"
+      # 监控窗口:预计 7/28 发布,留到 7/31 兜住顺延
+      window: {start: "2026-07-28", end: "2026-07-31"}
+      # 组间 AND、组内 OR
+      require_any:
+        - ["中共中央政治局"]
+        - ["会议"]
+        - ["分析研究当前经济形势和经济工作", "下半年经济工作", "当前经济形势和经济工作"]
+      # 只排除"另一个机构"。**不要**往这里加"四中全会":2025-07-30 那篇真通稿标题里就有,
+      # 加了会把真事件挡掉(event_fixtures.politburo_2025_07_30 守着这条)
+      exclude: ["政治局常务委员会", "中央政治局常委会"]
+      # 通稿的原发渠道。各地党政网站的转载 URL 常常没有日期,永远读不出发布时间,
+      # 不限定来源的话它们会每轮都触发一次无谓的复核。注意要写 www.gov.cn 而不是
+      # gov.cn,否则 erqi.gov.cn / guiyang.gov.cn 这类地方站会被误当权威源
+      trusted_domains: ["news.cn", "xinhuanet.com", "people.com.cn", "12371.cn", "www.gov.cn", "cctv.com"]
+      # 前瞻/解读类文章的标志,命中降级为待复核
+      soft_negative: ["前瞻", "预计将", "或将", "有望", "展望", "机构解读", "策略会"]
+      # 通稿正文特有的措辞,用来确认这是通稿本身而不是转述
+      require_confirm_any: ["主持会议", "会议指出", "会议强调", "会议认为", "会议决定"]
+      alert_title: "政治局会议通稿已发布"
+
+    - key: "skhynix_2026q2"
+      name: "SK海力士 2026 Q2 业绩"
+      queries:
+        - "SK하이닉스 2분기 영업이익 공시"
+        - "SK hynix Q2 2026 operating profit results"
+        - "SK海力士 二季度 业绩"
+      # 电话会 7/29 09:00 KST,공시在会前放出(约北京 07:00-08:00);
+      # 有英文源写 7/28,故窗口从 7/28 开
+      window: {start: "2026-07-28", end: "2026-07-29"}
+      require_any:
+        - ["SK하이닉스", "SK Hynix", "SK hynix", "SK海力士", "에스케이하이닉스"]
+        - ["2분기", "Q2", "2Q", "二季度", "第二季度"]
+        - ["영업이익", "operating profit", "잠정실적", "실적", "营业利润", "业绩"]
+      exclude: []
+      # 发布前满屏都是这类前瞻稿,是最大的误报来源
+      soft_negative: ["전망", "예상", "컨센서스", "앞두고", "예정", "expected to", "forecast", "preview", "前瞻", "预计"]
+      require_confirm_any: ["공시", "발표했다", "기록했다", "잠정실적", "reported", "posted", "公布", "披露"]
+      alert_title: "SK海力士Q2业绩已发布"
+
 # 数据与报告输出目录
 data_dir: "data"
 reports_dir: "reports"
