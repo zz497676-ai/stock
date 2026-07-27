@@ -1,0 +1,121 @@
+name: 事件提醒 → 飞书
+
+# 只负责"送达",不负责"检测"。检测在别处做(定时触发的 Claude 会话,或未来的 Actions 探测),
+# 这里只把已经判定成立的事件推到飞书群。
+#
+# 为什么要绕这一圈:本项目的定时会话运行在一个只放行 GitHub 的出口网络里,
+# open.feishu.cn 在那边是 403(策略拒绝),所以会话自己发不了飞书。
+# 但它能 git push,而 push 触发的 workflow 在**任意分支**都会跑
+# (只有 on: schedule 才限定默认分支)。于是:
+#
+#     会话检测到事件 → 写 data/alerts/<key>.json → git push
+#                    → 本 workflow 触发 → runner 去 POST 飞书
+#
+# 这样飞书送达不依赖会话能不能上外网,也不需要在会话里塞任何 token。
+
+on:
+  push:
+    paths:
+      - "data/alerts/**.json"
+  workflow_dispatch:
+    inputs:
+      title:
+        description: "提醒标题"
+        required: true
+        default: "测试提醒"
+      body:
+        description: "提醒正文"
+        required: true
+        default: "这是一条来自 notify-feishu.yml 的测试消息。"
+
+permissions:
+  contents: read
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # 需要和上一个提交比对,才知道这次 push 新增/改动了哪些 alert 文件
+          fetch-depth: 2
+
+      - name: 检查是否配置了 FEISHU_WEBHOOK
+        env:
+          HOOK: ${{ secrets.FEISHU_WEBHOOK }}
+        run: |
+          if [ -z "$HOOK" ]; then
+            echo "::error::仓库没有配置 FEISHU_WEBHOOK secret,无法推送飞书。"
+            echo "请到 Settings → Secrets and variables → Actions → New repository secret," >> "$GITHUB_STEP_SUMMARY"
+            echo "名称填 FEISHU_WEBHOOK,值填飞书自定义机器人的完整 webhook 地址。" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+      - name: 组装消息
+        id: build
+        env:
+          IN_TITLE: ${{ github.event.inputs.title }}
+          IN_BODY: ${{ github.event.inputs.body }}
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json, os, subprocess, pathlib
+
+          title = os.environ.get("IN_TITLE") or ""
+          body = os.environ.get("IN_BODY") or ""
+
+          if not title:
+              # push 触发:找出本次 push 改动的 alert 文件
+              diff = subprocess.run(
+                  ["git", "diff", "--name-only", "HEAD~1", "HEAD"],
+                  capture_output=True, text=True,
+              ).stdout.split()
+              files = [f for f in diff if f.startswith("data/alerts/") and f.endswith(".json")]
+              parts = []
+              for f in files:
+                  p = pathlib.Path(f)
+                  if not p.exists():
+                      continue
+                  d = json.loads(p.read_text(encoding="utf-8"))
+                  parts.append(d.get("message") or json.dumps(d, ensure_ascii=False))
+                  title = title or d.get("title", "事件提醒")
+              body = "\n\n".join(parts)
+
+          if not body:
+              # 没有可发的内容就别发空消息,直接跳过
+              print("skip=true")
+          else:
+              print("skip=false")
+              # 多行内容走 GITHUB_OUTPUT 的 heredoc 语法
+              print("payload<<__EOF__")
+              print(json.dumps(
+                  {"msg_type": "text", "content": {"text": f"{title}\n\n{body}"}},
+                  ensure_ascii=False,
+              ))
+              print("__EOF__")
+          PY
+
+      - name: 推送到飞书
+        if: steps.build.outputs.skip == 'false'
+        env:
+          HOOK: ${{ secrets.FEISHU_WEBHOOK }}
+          PAYLOAD: ${{ steps.build.outputs.payload }}
+        run: |
+          resp=$(curl -sS -X POST "$HOOK" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD")
+          echo "飞书返回: $resp"
+          # 飞书成功时返回 {"code":0,...};非 0 要让这一步失败,否则"推送失败"会被静默吞掉
+          echo "$resp" | python3 -c "
+          import json,sys
+          r = json.load(sys.stdin)
+          code = r.get('code', r.get('StatusCode', -1))
+          if code != 0:
+              print(f'::error::飞书拒绝了这条消息: {r}')
+              sys.exit(1)
+          print('飞书送达成功')
+          "
+
+      - name: 无内容可发
+        if: steps.build.outputs.skip == 'true'
+        run: echo "本次 push 没有带来可发送的 alert 内容,跳过。" >> "$GITHUB_STEP_SUMMARY"
