@@ -61,6 +61,14 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: main
+      - name: 从 gh-pages 取回逐股两融明细
+        run: |
+          # 同 deploy-on-data-push.yml:detail 只存在于 gh-pages,force_orphan 之前
+          # 必须先取回来,否则每天的日报发布都会把它抹掉。
+          git fetch origin gh-pages --depth=1 || exit 0
+          git --work-tree=./docs checkout FETCH_HEAD -- margin/detail 2>/dev/null || \
+            echo "gh-pages 上还没有 margin/detail(首次发布),跳过。"
+          git reset -q
       - name: 发布看板到 gh-pages 分支
         uses: peaceiris/actions-gh-pages@v4
         with:

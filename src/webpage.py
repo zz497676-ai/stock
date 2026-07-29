@@ -259,6 +259,7 @@ a { color: var(--outflow); }
   <div class="sub">数据截至 __DATE__ · 每交易日自动更新 ·
     <a id="report-link" href="#">查看当日文字日报</a> ·
     <a href="temperature.html">市场温度评分</a> ·
+    <a href="margin_search.html">个股两融分析</a> ·
     <a href="risk.html">仓位/止损风控小工具</a> ·
     <a href="quotes.html">六宫格分时盯盘</a></div>
 

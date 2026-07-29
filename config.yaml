@@ -76,6 +76,24 @@ leverage:
   min_float_mcap_yi: 20.0      # 剔除流通市值低于此值(亿元)的个股,避免小盘噪音
   balance_ratio_alert_pct: 8.0 # 融资余额占流通市值超过该比例,标记"杠杆偏高"
 
+# 个股两融历史分析(spec: specs/margin-analysis.md)
+# 数据由 scripts/build_margin_db.py 在能访问东财/新浪的机器上本地生成,
+# 产出 docs/margin/latest.json(总索引)与 docs/margin/detail/{code}.json(逐股明细)。
+margin:
+  history_days: 250            # detail 保留的交易日数,超出从最老的一端截断
+  min_float_mcap_yi: 20.0      # 剔除流通市值低于此值(亿元)的个股,与 leverage 同口径
+  # 四大异动标签的判定阈值。标签用 bit 存:1=杠杆抢筹 2=爆仓高危 4=融券看空 8=逆势加杠杆
+  tags:
+    surge_5d_pct: 15.0         # 杠杆抢筹:融资余额5日增幅(%)
+    buy_spike_x: 1.5           # 杠杆抢筹:融资买入额 / 其20日均值
+    drawdown_20d_pct: 15.0     # 爆仓高危:近20日自最高点的回撤(%)
+    short_surge_5d_pct: 50.0   # 融券看空:融券余量5日增幅(%)
+    short_pct_rank: 80.0       # 融券看空:融券余量在全窗口中的分位(%)
+    contrarian_drop_pct: 8.0   # 逆势加杠杆:近10日股价跌幅(%)
+    contrarian_bal_up_pct: 5.0 # 逆势加杠杆:同期融资余额涨幅(%)
+  # 融资余额占流通市值(%)的分档边界,对应 低/中/高/极高 四级杠杆风险
+  risk_bands: [4.0, 8.0, 12.0]
+
 # 市场温度评分(spec: specs/market-temperature.md)
 temperature:
   # 组间权重(总和应为1;某组当日整组缺席时,总分按剩余组权重归一化)

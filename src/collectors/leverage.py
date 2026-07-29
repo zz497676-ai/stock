@@ -45,8 +45,8 @@ def _szse_margin_buy_on(trade_date: date) -> float | None:
     return None
 
 
-def _spot_quote() -> tuple[pd.DataFrame | None, bool]:
-    """全市场行情快照:代码/成交额/流通市值/涨跌幅/振幅。返回 (df, has_mcap)。
+def spot_quote() -> tuple[pd.DataFrame | None, bool]:
+    """全市场行情快照:代码/名称/最新价/成交额/流通市值/涨跌幅/振幅。返回 (df, has_mcap)。
 
     主源东财 stock_zh_a_spot_em 走 82.push2 host,对部分 CI 环境的出口 IP 经常连不上;
     它内部按页爬全市场、每页间还有随机 sleep+自身重试,连接被reset时即使我们这层
@@ -55,11 +55,14 @@ def _spot_quote() -> tuple[pd.DataFrame | None, bool]:
 
     备用源新浪 stock_zh_a_spot,host 不同,但不返回流通市值,只能算"融资买入占
     成交额%"这一项;"融资余额占流通市值%"和市值过滤阈值在这条路径下不可用。
+
+    带上"名称"与"最新价"是给 scripts/build_margin_db.py 用的:它需要
+    流通股本 = 流通市值 / 最新价,再乘历史收盘价倒推历史流通市值。
     """
+    cols = ["代码", "名称", "最新价", "成交额", "流通市值", "涨跌幅", "振幅"]
     em = cached_fetch("stock_zh_a_spot_em", retries=1, hard_timeout=20)
     if em is not None and not em.empty:
-        df = em[["代码", "成交额", "流通市值", "涨跌幅", "振幅"]].copy()
-        return df, True
+        return em[cols].copy(), True
 
     sina = cached_fetch("stock_zh_a_spot", retries=1, hard_timeout=45)
     if sina is not None and not sina.empty:
@@ -70,13 +73,21 @@ def _spot_quote() -> tuple[pd.DataFrame | None, bool]:
         prev_close = pd.to_numeric(df["昨收"], errors="coerce")
         df["振幅"] = (high - low) / prev_close * 100
         df["流通市值"] = float("nan")
-        return df[["代码", "成交额", "流通市值", "涨跌幅", "振幅"]], False
+        return df[cols], False
 
     return None, False
 
 
-def _margin_detail_on(trade_date: date) -> tuple[pd.DataFrame | None, date | None]:
-    """合并沪深两市个股融资融券明细;明细为 T+1 披露,当日取不到时往前找。"""
+# 沪深两市明细统一后的列;融券余量单位是"股",其余金额单位是"元"
+DETAIL_COLS = ["代码", "名称", "融资余额", "融资买入额", "融券余量"]
+
+
+def margin_detail_on(trade_date: date) -> tuple[pd.DataFrame | None, date | None]:
+    """合并沪深两市个股融资融券明细;明细为 T+1 披露,当日取不到时往前找。
+
+    融券余量(单位:股)本模块自己用不到,但 scripts/build_margin_db.py 要靠它算
+    "融券看空"标签,所以在这里一并带出来——两市接口都有这一列,取它不增加请求。
+    """
     for back in range(0, 4):
         d = trade_date - timedelta(days=back)
         ds = d.strftime("%Y%m%d")
@@ -86,14 +97,12 @@ def _margin_detail_on(trade_date: date) -> tuple[pd.DataFrame | None, date | Non
         if sse is not None and not sse.empty:
             frames.append(
                 sse.rename(columns={"标的证券代码": "代码", "标的证券简称": "名称"})[
-                    ["代码", "名称", "融资余额", "融资买入额"]
+                    DETAIL_COLS
                 ]
             )
         if szse is not None and not szse.empty:
             frames.append(
-                szse.rename(columns={"证券代码": "代码", "证券简称": "名称"})[
-                    ["代码", "名称", "融资余额", "融资买入额"]
-                ]
+                szse.rename(columns={"证券代码": "代码", "证券简称": "名称"})[DETAIL_COLS]
             )
         if frames:
             return pd.concat(frames, ignore_index=True), d
@@ -108,12 +117,13 @@ def build_stock_table(trade_date: date) -> tuple[pd.DataFrame | None, date | Non
     """
     cfg = load_config().get("leverage", {})
     min_mcap = float(cfg.get("min_float_mcap_yi", 20.0)) * 1e8
-    detail, detail_date = _margin_detail_on(trade_date)
-    spot, has_mcap = _spot_quote()
+    detail, detail_date = margin_detail_on(trade_date)
+    spot, has_mcap = spot_quote()
     if detail is None or spot is None or spot.empty:
         return None, None, False
 
-    spot = spot.copy()
+    # 快照也带"名称",与明细的"名称"重名会被 merge 改成 名称_x/名称_y,这里以明细为准
+    spot = spot.drop(columns=["名称"]).copy()
     spot["代码"] = spot["代码"].astype(str)
     detail = detail.copy()
     detail["代码"] = detail["代码"].astype(str)

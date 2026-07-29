@@ -22,6 +22,15 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+      - name: 从 gh-pages 取回逐股两融明细
+        run: |
+          # docs/margin/detail/ 体积大(约43MB)且每日全量重写,被 .gitignore 排除、
+          # 只由 scripts/build_margin_db.py 直接推到 gh-pages。下面的 force_orphan
+          # 会用 main 的 docs/ 整树替换 gh-pages,不先取回来就会把它抹掉。
+          git fetch origin gh-pages --depth=1 || exit 0
+          git --work-tree=./docs checkout FETCH_HEAD -- margin/detail 2>/dev/null || \
+            echo "gh-pages 上还没有 margin/detail(首次发布),跳过。"
+          git reset -q
       - name: 发布看板到 gh-pages 分支
         uses: peaceiris/actions-gh-pages@v4
         with:

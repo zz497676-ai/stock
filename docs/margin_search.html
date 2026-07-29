@@ -1,0 +1,377 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>个股两融分析</title>
+<style>
+:root {
+  color-scheme: light dark;
+  --page: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --sec: #52514e;
+  --mut: #898781; --grid: #e1e0d9; --axis: #c3c2b7;
+  --danger: #e34948; --safe: #2a78d6; --warn: #c98a1f; --neutral: #f0efec;
+  --line: #2a78d6; --line2: #b7b6ad; --ring: rgba(11,11,11,0.10);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --page: #0d0d0d; --surface: #1a1a19; --ink: #ffffff; --sec: #c3c2b7;
+    --grid: #2c2c2a; --axis: #383835;
+    --danger: #e66767; --safe: #3987e5; --warn: #d9a441; --neutral: #383835;
+    --line: #3987e5; --line2: #55544f; --ring: rgba(255,255,255,0.10);
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--ink);
+  font-family: system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; }
+.wrap { max-width: 760px; margin: 0 auto; padding: 24px 16px 48px; }
+.topnav { font-size: 13px; margin-bottom: 10px; }
+.topnav a { color: var(--safe); text-decoration: none; }
+h1 { font-size: 22px; margin: 0 0 4px; }
+.sub { color: var(--mut); font-size: 13px; margin-bottom: 18px; line-height: 1.6; }
+.card { background: var(--surface); border: 1px solid var(--ring); border-radius: 10px;
+  padding: 16px 18px; margin-bottom: 16px; }
+.card h2 { font-size: 15px; margin: 0 0 10px; }
+.card .hint { color: var(--mut); font-size: 12px; margin: -6px 0 10px; }
+
+/* ---- 搜索框(同 index.html 的个股查询) ---- */
+.search-wrap { position: relative; }
+.search-wrap input { width: 100%; font-size: 15px; padding: 10px 14px; border-radius: 8px;
+  border: 1px solid var(--ring); background: var(--surface); color: var(--ink); }
+.search-wrap input:focus { outline: 2px solid var(--safe); outline-offset: -1px; }
+.search-drop { position: absolute; left: 0; right: 0; top: calc(100% + 4px); background: var(--surface);
+  border: 1px solid var(--ring); border-radius: 8px; box-shadow: 0 6px 18px rgba(0,0,0,.14);
+  max-height: 260px; overflow-y: auto; z-index: 8; display: none; }
+.search-drop div { padding: 8px 14px; cursor: pointer; font-size: 14px; }
+.search-drop div:hover, .search-drop div.active { background: var(--neutral); }
+.search-drop .code { color: var(--mut); font-size: 12px; margin-left: 6px; }
+.search-drop .py { color: var(--mut); font-size: 11px; margin-left: 6px; }
+
+/* ---- 结果头部 ---- */
+.stock-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.stock-head .name { font-size: 19px; font-weight: 600; }
+.stock-head .code { color: var(--mut); font-size: 13px; font-variant-numeric: tabular-nums; }
+.stock-head .date { color: var(--mut); font-size: 12px; margin-left: auto; }
+.tags { display: flex; gap: 6px; flex-wrap: wrap; margin: 12px 0 4px; min-height: 22px; }
+.tag { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600;
+  white-space: nowrap; }
+.tag.t1 { background: color-mix(in srgb, var(--danger) 18%, transparent); color: var(--danger); }
+.tag.t2 { background: color-mix(in srgb, var(--danger) 30%, transparent); color: var(--danger); }
+.tag.t4 { background: color-mix(in srgb, var(--safe) 18%, transparent); color: var(--safe); }
+.tag.t8 { background: color-mix(in srgb, var(--warn) 20%, transparent); color: var(--warn); }
+.tag.none { background: var(--neutral); color: var(--mut); font-weight: 500; }
+.riskbar { display: flex; align-items: center; gap: 10px; margin: 12px 0 2px; }
+.riskbar .lab { font-size: 12px; color: var(--mut); flex: none; }
+.riskTrack { flex: 1; display: flex; gap: 3px; }
+.riskTrack i { flex: 1; height: 8px; border-radius: 999px; background: var(--neutral); }
+.riskTrack i.on { background: var(--warn); }
+.riskTrack i.on.hi { background: var(--danger); }
+.riskbar .val { font-size: 14px; font-weight: 700; flex: none; }
+.riskbar .val.r0 { color: var(--safe); } .riskbar .val.r1 { color: var(--sec); }
+.riskbar .val.r2 { color: var(--warn); } .riskbar .val.r3 { color: var(--danger); }
+
+.result { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 14px; }
+@media (max-width: 560px) { .result { grid-template-columns: 1fr 1fr; } }
+.stat { background: var(--page); border: 1px solid var(--ring); border-radius: 8px; padding: 9px 10px; }
+.stat .k { font-size: 12px; color: var(--mut); }
+.stat .v { font-size: 17px; font-weight: 700; margin-top: 3px; font-variant-numeric: tabular-nums; }
+.stat .v.muted { color: var(--mut); font-size: 14px; font-weight: 500; }
+.stat .v.up { color: var(--danger); } .stat .v.down { color: var(--safe); }
+
+/* ---- 图表 ---- */
+.filters { display: flex; gap: 8px; margin: 0 0 10px; flex-wrap: wrap; }
+.filters button { border: 1px solid var(--ring); background: var(--surface); color: var(--sec);
+  border-radius: 999px; padding: 5px 14px; font-size: 13px; cursor: pointer; }
+.filters button.on { color: var(--ink); font-weight: 600; border-color: var(--axis); }
+.filters button:hover { background: var(--neutral); }
+#chart { width: 100%; height: 380px; }
+@media (max-width: 560px) { #chart { height: 320px; } }
+
+.empty { color: var(--mut); font-size: 13px; padding: 24px 0; text-align: center; line-height: 1.7; }
+.foot { color: var(--mut); font-size: 12px; line-height: 1.7; }
+a { color: var(--safe); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topnav"><a href="index.html">← 返回资金动向看板</a></div>
+  <h1>个股两融分析</h1>
+  <div class="sub">按代码 / 名称 / 拼音首字母查询任意两融标的,对比近一年的<b>股价走势</b>与
+    <b>融资余额变化</b>,并自动标出四类杠杆异动。数据由沪深交易所每日披露的融资融券明细计算,
+    T+1 更新。客观统计,不构成投资建议。</div>
+
+  <div class="card">
+    <h2>个股查询</h2>
+    <div class="hint" id="idxHint">正在加载两融标的索引...</div>
+    <div class="search-wrap">
+      <input id="q" type="text" placeholder="例如 600519 / 贵州茅台 / GZMT" autocomplete="off" disabled>
+      <div class="search-drop" id="drop"></div>
+    </div>
+  </div>
+
+  <div class="card" id="panel" hidden>
+    <div class="stock-head">
+      <span class="name" id="sName">--</span>
+      <span class="code" id="sCode">--</span>
+      <span class="date" id="sDate"></span>
+    </div>
+    <div class="tags" id="sTags"></div>
+    <div class="riskbar">
+      <span class="lab">杠杆风险等级</span>
+      <span class="riskTrack" id="sRiskBar"><i></i><i></i><i></i></span>
+      <span class="val" id="sRisk">--</span>
+    </div>
+    <div class="result">
+      <div class="stat"><div class="k">融资余额</div><div class="v" id="vBal">--</div></div>
+      <div class="stat"><div class="k">占流通市值</div><div class="v" id="vRatio">--</div></div>
+      <div class="stat"><div class="k">融资买入额</div><div class="v" id="vBuy">--</div></div>
+      <div class="stat"><div class="k">融券余量</div><div class="v" id="vShort">--</div></div>
+    </div>
+  </div>
+
+  <div class="card" id="chartCard" hidden>
+    <h2>股价走势 vs 融资余额变化</h2>
+    <div class="hint">左轴为不复权收盘价(除权日会有跳空),右轴为融资余额;标记点是当日命中的异动标签。</div>
+    <div class="filters" id="range">
+      <button data-n="30">近30日</button>
+      <button data-n="90" class="on">近90日</button>
+      <button data-n="0">全部</button>
+    </div>
+    <div id="chart"></div>
+  </div>
+
+  <div class="card empty" id="tip">输入股票代码、名称或拼音首字母开始查询。</div>
+
+  <div class="card foot">
+    融资余额占流通市值中的流通市值,由“当前流通股本 × 当日收盘价”推算,遇到增发/解禁等股本变动会有偏差。
+    融券余量单位为万股。异动标签是按 config.yaml 中固定阈值做的机械判定,只描述已发生的杠杆变化,
+    不预测涨跌。本页数据仅为公开数据自动聚合,不构成投资建议,风险自负。
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"
+        onerror="window.__echartsFailed = true"></script>
+<script>
+const $ = id => document.getElementById(id);
+const cssVar = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const fmt = (n, d = 2) => Number(n).toLocaleString("zh-CN", { minimumFractionDigits: d, maximumFractionDigits: d });
+
+let IDX = null;      // latest.json
+let CUR = null;      // 当前个股的 detail
+let chart = null;
+let range = 90;
+
+// ---- 索引(全站唯一一次性加载,~170KB);失败时给出可见提示而不是白屏 ----
+fetch("margin/latest.json").then(r => r.json()).then(d => {
+  IDX = d;
+  $("q").disabled = false;
+  $("idxHint").textContent =
+    `共 ${d.n} 只两融标的,数据截至 ${d.u}(两融为 T+1 披露)。支持代码 / 名称 / 拼音首字母。`;
+  const code = new URLSearchParams(location.search).get("code");
+  if (code) select(code);
+}).catch(() => {
+  $("idxHint").textContent = "margin/latest.json 加载失败(可能是离线打开本页,或数据尚未生成)。";
+});
+
+// ---- 搜索:代码 / 名称 / 拼音首字母 三路子串匹配 ----
+function matchStocks(q) {
+  q = q.trim().toLowerCase();
+  if (!q || !IDX) return [];
+  return IDX.s.filter(s =>
+    s[0].includes(q) || s[1].toLowerCase().includes(q) || (s[2] || "").toLowerCase().includes(q)
+  ).slice(0, 8);
+}
+
+function renderDrop() {
+  const box = $("drop");
+  const hits = matchStocks($("q").value);
+  if (!hits.length) { box.style.display = "none"; return; }
+  box.innerHTML = "";
+  hits.forEach(s => {
+    const row = document.createElement("div");
+    row.innerHTML = `${s[1]}<span class="code">${s[0]}</span>` +
+      (s[2] ? `<span class="py">${s[2]}</span>` : "");
+    row.onclick = () => select(s[0]);
+    box.appendChild(row);
+  });
+  box.style.display = "block";
+}
+
+$("q").addEventListener("input", renderDrop);
+$("q").addEventListener("keydown", e => {
+  if (e.key !== "Enter") return;
+  const hits = matchStocks($("q").value);
+  if (hits.length) select(hits[0][0]);
+});
+document.addEventListener("click", e => {
+  if (!e.target.closest(".search-wrap")) $("drop").style.display = "none";
+});
+
+// ---- 选中个股:懒加载 detail/{code}.json ----
+function select(code) {
+  $("drop").style.display = "none";
+  $("tip").hidden = false;
+  $("tip").textContent = `正在加载 ${code} 的两融明细...`;
+  fetch(`margin/detail/${code}.json`).then(r => {
+    if (!r.ok) throw new Error(r.status);
+    return r.json();
+  }).then(d => {
+    CUR = d;
+    $("q").value = `${d.n} ${d.c}`;
+    $("tip").hidden = true;
+    render();
+  }).catch(() => {
+    $("tip").hidden = false;
+    $("panel").hidden = true;
+    $("chartCard").hidden = true;
+    $("tip").textContent = `没有 ${code} 的两融明细(该股可能不是两融标的,或明细尚未生成)。`;
+  });
+}
+
+// ---- 顶部卡片 ----
+function render() {
+  const col = Object.fromEntries(CUR.f.map((k, i) => [k, i]));
+  const last = CUR.d[CUR.d.length - 1];
+  $("panel").hidden = false;
+  $("chartCard").hidden = false;
+  $("sName").textContent = CUR.n;
+  $("sCode").textContent = CUR.c;
+  $("sDate").textContent = `数据日期 ${CUR.u}`;
+
+  const tags = $("sTags");
+  tags.innerHTML = "";
+  const names = (IDX && IDX.tag_names) || ["杠杆抢筹", "爆仓高危", "融券看空", "逆势加杠杆"];
+  const hit = names.filter((_, i) => CUR.tag >> i & 1);
+  if (!hit.length) {
+    tags.innerHTML = '<span class="tag none">当前无异动标签</span>';
+  } else {
+    names.forEach((n, i) => {
+      if (!(CUR.tag >> i & 1)) return;
+      const s = document.createElement("span");
+      s.className = `tag t${1 << i}`;
+      s.textContent = n;
+      tags.appendChild(s);
+    });
+  }
+
+  const riskNames = (IDX && IDX.risk_names) || ["低", "中", "高", "极高"];
+  $("sRisk").textContent = riskNames[CUR.risk];
+  $("sRisk").className = `val r${CUR.risk}`;
+  [...$("sRiskBar").children].forEach((i, n) => {
+    i.className = n < CUR.risk ? (CUR.risk === 3 ? "on hi" : "on") : "";
+  });
+
+  const num = (v, unit, d = 2) => v == null ? "—" : fmt(v, d) + unit;
+  $("vBal").textContent = num(last[col.bal], "亿");
+  $("vRatio").textContent = num(last[col.ratio], "%");
+  $("vRatio").className = "v" + (last[col.ratio] != null && IDX && last[col.ratio] >= IDX.alert_pct ? " up" : "");
+  $("vBuy").textContent = num(last[col.buy], "亿");
+  $("vShort").textContent = num(last[col.short], "万股", 1);
+  drawChart();
+}
+
+// ---- ECharts 双 Y 轴 ----
+// ECharts 不认 CSS 变量,颜色要在构图时用 cssVar() 读出来;所以切换明暗主题必须重绘。
+function drawChart() {
+  const box = $("chart");
+  if (window.__echartsFailed || typeof echarts === "undefined") {
+    box.innerHTML = '<div class="empty">图表库(ECharts CDN)加载失败,曲线无法显示。' +
+      '上方的标签与数值不受影响。</div>';
+    return;
+  }
+  if (!CUR) return;
+  const col = Object.fromEntries(CUR.f.map((k, i) => [k, i]));
+  const rows = range > 0 ? CUR.d.slice(-range) : CUR.d;
+  const label = d => `${String(d).slice(0, 4)}-${String(d).slice(4, 6)}-${String(d).slice(6)}`;
+  const evt = new Map(CUR.t.map(([d, b]) => [d, b]));
+  const names = (IDX && IDX.tag_names) || ["杠杆抢筹", "爆仓高危", "融券看空", "逆势加杠杆"];
+
+  const ink = cssVar("--ink"), mut = cssVar("--mut"), grid = cssVar("--grid");
+  const danger = cssVar("--danger"), surface = cssVar("--surface"), ring = cssVar("--axis");
+
+  if (!chart) chart = echarts.init(box);
+  chart.setOption({
+    backgroundColor: "transparent",
+    animation: false,
+    textStyle: { color: mut, fontFamily: "inherit" },
+    grid: { left: 8, right: 8, top: 34, bottom: 58, containLabel: true },
+    legend: { data: ["股价", "融资余额"], top: 0, textStyle: { color: mut }, itemGap: 18 },
+    tooltip: {
+      trigger: "axis",
+      backgroundColor: surface, borderColor: ring, textStyle: { color: ink, fontSize: 12 },
+      formatter: params => {
+        if (!params.length) return "";
+        const i = params[0].dataIndex;
+        const r = rows[i];
+        const bits = evt.get(r[col.d]) || 0;
+        const hit = names.filter((_, k) => bits >> k & 1);
+        return `<b>${label(r[col.d])}</b><br>` +
+          `股价 ${r[col.close] == null ? "—" : fmt(r[col.close])} 元<br>` +
+          `融资余额 ${r[col.bal] == null ? "—" : fmt(r[col.bal])} 亿 ` +
+          `(占流通市值 ${r[col.ratio] == null ? "—" : fmt(r[col.ratio])}%)<br>` +
+          `融资买入额 ${r[col.buy] == null ? "—" : fmt(r[col.buy])} 亿<br>` +
+          `融券余量 ${r[col.short] == null ? "—" : fmt(r[col.short], 1)} 万股` +
+          (hit.length ? `<br><b style="color:${danger}">${hit.join(" · ")}</b>` : "");
+      }
+    },
+    xAxis: {
+      type: "category",
+      data: rows.map(r => label(r[col.d])),
+      axisLine: { lineStyle: { color: grid } },
+      axisTick: { show: false },
+      axisLabel: { color: mut, fontSize: 11 }
+    },
+    yAxis: [
+      { type: "value", scale: true, name: "股价(元)", nameTextStyle: { color: mut, fontSize: 11 },
+        splitLine: { lineStyle: { color: grid } }, axisLabel: { color: mut, fontSize: 11 } },
+      { type: "value", scale: true, name: "融资余额(亿)", nameTextStyle: { color: mut, fontSize: 11 },
+        splitLine: { show: false }, axisLabel: { color: mut, fontSize: 11 } }
+    ],
+    dataZoom: [
+      { type: "inside" },
+      { type: "slider", height: 18, bottom: 14, borderColor: grid,
+        textStyle: { color: mut, fontSize: 10 } }
+    ],
+    series: [
+      {
+        name: "股价", type: "line", showSymbol: false, smooth: false,
+        lineStyle: { color: ink, width: 1.6 }, itemStyle: { color: ink },
+        data: rows.map(r => r[col.close])
+      },
+      {
+        name: "融资余额", type: "line", yAxisIndex: 1, showSymbol: false, smooth: false,
+        lineStyle: { color: danger, width: 1.8 }, itemStyle: { color: danger },
+        areaStyle: { color: danger, opacity: 0.07 },
+        data: rows.map(r => r[col.bal]),
+        markPoint: {
+          symbol: "pin", symbolSize: 26,
+          label: { color: surface, fontSize: 10, fontWeight: 700 },
+          itemStyle: { color: danger },
+          data: rows.reduce((acc, r, i) => {
+            const bits = evt.get(r[col.d]);
+            // 连续命中同一标签时只在首日打点,否则一片红针看不清
+            const prev = i > 0 ? evt.get(rows[i - 1][col.d]) || 0 : 0;
+            if (bits && bits !== prev) {
+              acc.push({ xAxis: i, yAxis: r[col.bal], value: "!",
+                name: names.filter((_, k) => bits >> k & 1).join("·") });
+            }
+            return acc;
+          }, [])
+        }
+      }
+    ]
+  }, true);
+}
+
+$("range").addEventListener("click", e => {
+  const btn = e.target.closest("button");
+  if (!btn) return;
+  [...$("range").children].forEach(b => b.classList.toggle("on", b === btn));
+  range = Number(btn.dataset.n);
+  drawChart();
+});
+
+window.addEventListener("resize", () => chart && chart.resize());
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { if (CUR) drawChart(); });
+</script>
+</body>
+</html>

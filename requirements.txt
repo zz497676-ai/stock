@@ -1,3 +1,4 @@
 akshare>=1.18.0
 pandas>=2.0
 PyYAML>=6.0
+pypinyin>=0.53

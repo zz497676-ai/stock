@@ -3,3 +3,7 @@ __pycache__/
 *.pyc
 reports/mock-*.md
 reports/charts-mock/
+
+# 逐股两融明细体积大(约3800只 x 11KB ≈ 43MB)且每日全量重写,
+# 放进 main 的 git 历史一年就要 2GB+;它只发布到 gh-pages(force_orphan,历史不累积)。
+docs/margin/detail/
