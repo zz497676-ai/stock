@@ -28,15 +28,15 @@
 <text x="20" y="30" font-size="16" font-weight="600">全市场ETF份额日变动(公募申赎代理)</text>
 <text x="740" y="30" font-size="12" text-anchor="end" class="mut">亿份</text>
 <line x1="76" y1="204.0" x2="736" y2="204.0" class="grid"/>
-<text x="68" y="208.0" font-size="11" text-anchor="end" class="mut">-264.4</text>
+<text x="68" y="208.0" font-size="11" text-anchor="end" class="mut">-300.5</text>
 <line x1="76" y1="153.3" x2="736" y2="153.3" class="grid"/>
-<text x="68" y="157.3" font-size="11" text-anchor="end" class="mut">187.8</text>
+<text x="68" y="157.3" font-size="11" text-anchor="end" class="mut">165.0</text>
 <line x1="76" y1="102.7" x2="736" y2="102.7" class="grid"/>
-<text x="68" y="106.7" font-size="11" text-anchor="end" class="mut">639.9</text>
+<text x="68" y="106.7" font-size="11" text-anchor="end" class="mut">630.4</text>
 <line x1="76" y1="52.0" x2="736" y2="52.0" class="grid"/>
-<text x="68" y="56.0" font-size="11" text-anchor="end" class="mut">1,092.0</text>
-<polyline points="76.0,174.8 126.8,153.2 177.5,163.4 228.3,66.7 279.1,179.8 329.8,187.3 380.6,161.7 431.4,172.1 482.2,161.5 532.9,151.6 583.7,160.1 634.5,144.1 685.2,189.3 736.0,150.7" class="line"/>
-<circle cx="736.0" cy="150.7" r="5" class="dot"/>
-<text x="736.0" y="138.7" font-size="12" font-weight="600" text-anchor="end">211.3</text>
+<text x="68" y="56.0" font-size="11" text-anchor="end" class="mut">1,095.9</text>
+<polyline points="76.0,171.8 123.1,150.8 170.3,160.7 217.4,66.7 264.6,176.6 311.7,183.8 358.9,159.0 406.0,169.1 453.1,158.8 500.3,149.2 547.4,157.4 594.6,141.9 641.7,185.8 688.9,148.3 736.0,189.3" class="line"/>
+<circle cx="736.0" cy="189.3" r="5" class="dot"/>
+<text x="736.0" y="177.3" font-size="12" font-weight="600" text-anchor="end">-165.4</text>
 <text x="76" y="228" font-size="10" class="mut">2026-07-16</text>
-<text x="736" y="228" font-size="10" text-anchor="end" class="mut">2026-08-04</text></svg>
+<text x="736" y="228" font-size="10" text-anchor="end" class="mut">2026-08-07</text></svg>
