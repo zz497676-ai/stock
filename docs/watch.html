@@ -120,7 +120,7 @@
 
   <label class="chk"><input type="checkbox" id="toolbar"> 工具栏</label>
   <button class="primary" id="apply">应用</button>
-  <button id="reset" title="恢复默认代码">重置</button>
+  <button id="reset" title="恢复 2026-08-10 周一预设（会覆盖当前输入）">重置</button>
   <span class="tip" id="tip">代码格式:<b>NASDAQ:AAPL</b> / <b>HKEX:700</b> / <b>SSE:600519</b>,纯数字可省略前缀</span>
 </header>
 
@@ -147,7 +147,17 @@
 
   var KEY = 'sixgrid_stock_v1';
   var N = 6;
-  var DEFAULTS = ['SSE:000001','SSE:600519','SZSE:300750','HKEX:700','NASDAQ:AAPL','NASDAQ:NVDA'];
+  // Monday 2026-08-10 preset from reports/2026-08-07.md:
+  // two market-context symbols, then the four highest Friday 龙虎榜 net-buy names.
+  // Keep KEY stable: loadState() overlays this preset with any saved local settings.
+  var DEFAULTS = [
+    'SSE:000001',  // 上证指数
+    'SZSE:399006', // 创业板指
+    'SZSE:000831', // 中国稀土
+    'SZSE:301707', // 展芯股份 (无涨跌幅限制, 高波动)
+    'SSE:603459',  // 红板科技
+    'SZSE:001267'  // 汇绿生态
+  ];
 
   var grid = document.getElementById('grid');
   var inputsBox = document.getElementById('inputs');
