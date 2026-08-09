@@ -76,6 +76,11 @@ leverage:
   min_float_mcap_yi: 20.0      # 剔除流通市值低于此值(亿元)的个股,避免小盘噪音
   balance_ratio_alert_pct: 8.0 # 融资余额占流通市值超过该比例,标记"杠杆偏高"
 
+# 数据源短暂不可用时允许读取的最近成功快照窗口。所有降级值都会在日报中
+# 标出真实数据日期;超过窗口就宁缺毋滥,不把很旧的数字当成当前行情。
+resilience:
+  max_stale_days: 7
+
 # 市场温度评分(spec: specs/market-temperature.md)
 temperature:
   # 组间权重(总和应为1;某组当日整组缺席时,总分按剩余组权重归一化)

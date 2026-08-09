@@ -24,6 +24,21 @@ def _df_to_md(df: pd.DataFrame) -> str:
     return "\n".join([header, sep, *rows])
 
 
+def _quality_notes(
+    results: list[tuple[CollectorResult, Verdict]],
+    leverage: CollectorResult | None,
+) -> list[tuple[str, str]]:
+    """Collect actionable missing/freshness notes for a report-level summary."""
+    all_results = [r for r, _ in results] + ([leverage] if leverage is not None else [])
+    markers = ("缺失", "不可用", "备用", "历史", "数据截至", "无法计算", "不完整", "未更新")
+    output = []
+    for result in all_results:
+        for note in result.notes:
+            if any(marker in note for marker in markers):
+                output.append((result.title, note))
+    return output
+
+
 def render(
     trade_date: date,
     results: list[tuple[CollectorResult, Verdict]],
@@ -35,6 +50,13 @@ def render(
     lines.append("> 本报告由公开数据自动生成。**方向结论按数据可得性标注置信度**:")
     lines.append("> 高=每日硬数据(龙虎榜/公告/两融);中=每日代理指标(行为推断);低=仅低频或间接证据。")
     lines.append("")
+    quality = _quality_notes(results, leverage)
+    if quality:
+        lines.append(
+            "> ⚠️ 数据质量提示:本次运行保留了可用字段;缺失字段不补零,备用/历史值不视为当日值。"
+            "各节中的警告包含具体来源和数据截至日期。"
+        )
+        lines.append("")
 
     # 总览表
     lines.append("## 一、七类资金动向总览")
@@ -105,6 +127,14 @@ def render(
         "- 个股杠杆排行剔除了流通市值过小的个股(阈值见 config.yaml),"
         "融资余额/买入额与当日行情存在披露时点差异,仅作参考,不构成个股推荐。"
     )
+    if quality:
+        lines.append(
+            "> ⚠️ 本报告含缺失、备用或历史快照数据;每条降级数字均按“数据截至 YYYY-MM-DD”标注真实新鲜度。"
+        )
+        lines.append("")
+        lines.append("**本次运行的数据质量明细:**")
+        for title, note in quality:
+            lines.append(f"- {title}: {note}")
     if FETCH_ERRORS:
         lines.append("")
         lines.append("**本次运行失败的数据源:**")

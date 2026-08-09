@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 from collectors import CollectorResult
@@ -28,9 +29,23 @@ def _clamp(x: int) -> int:
     return max(-2, min(2, x))
 
 
+def _number(value) -> float | None:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) else None
+
+
+def _confidence(r: CollectorResult, default: str) -> str:
+    """Downgrade conclusions that include a fallback, stale, or partial source."""
+    markers = ("缺失", "不可用", "备用", "代理", "历史", "数据截至", "无法", "不完整", "未更新")
+    return "中" if any(any(marker in note for marker in markers) for note in r.notes) else default
+
+
 def analyze_national_team(r: CollectorResult) -> Verdict:
-    spikes = r.metrics.get("etf_spike_count")
-    chg = r.metrics.get("csi300_chg")
+    spikes = _number(r.metrics.get("etf_spike_count"))
+    chg = _number(r.metrics.get("csi300_chg"))
     if spikes is None:
         if any(k.startswith("turnover_") for k in r.metrics):
             return Verdict(0, "低", "ETF成交已记录,放量基线累积中(约需一个月),暂不判断方向。")
@@ -45,18 +60,19 @@ def analyze_national_team(r: CollectorResult) -> Verdict:
 
 
 def analyze_insurance_social(r: CollectorResult) -> Verdict:
-    hits = r.metrics.get("insurance_notice_hits")
+    hits = _number(r.metrics.get("insurance_notice_hits"))
     if hits is None:
         return Verdict(None, "低", "公告数据缺失,无法扫描。")
     if hits > 0:
-        return Verdict(1, "低", f"命中 {hits} 条疑似险资/社保持股变动公告,方向以增持/举牌居多,需人工复核。")
+        hits_text = int(hits) if hits.is_integer() else hits
+        return Verdict(1, "低", f"命中 {hits_text} 条疑似险资/社保持股变动公告,方向以增持/举牌居多,需人工复核。")
     return Verdict(0, "低", "无涉险资/社保公告;险资无每日数据,默认视为中性。")
 
 
 def analyze_mutual_fund(r: CollectorResult) -> Verdict:
-    chg = r.metrics.get("etf_shares_chg")
-    total = r.metrics.get("etf_total_shares")
-    new_amt = r.metrics.get("new_equity_fund_amt_7d") or 0
+    chg = _number(r.metrics.get("etf_shares_chg"))
+    total = _number(r.metrics.get("etf_total_shares"))
+    new_amt = _number(r.metrics.get("new_equity_fund_amt_7d")) or 0
     if chg is None or not total:
         base = 0 if new_amt else None
         note = f"ETF份额环比待历史累积;近7天新发权益基金 {new_amt:.0f}亿份。" if new_amt else "数据不足。"
@@ -75,8 +91,8 @@ def analyze_mutual_fund(r: CollectorResult) -> Verdict:
 
 
 def analyze_quant(r: CollectorResult) -> Verdict:
-    diff = r.metrics.get("csi2000_share_diff")
-    share = r.metrics.get("csi2000_share_pct")
+    diff = _number(r.metrics.get("csi2000_share_diff"))
+    share = _number(r.metrics.get("csi2000_share_pct"))
     if share is None:
         return Verdict(None, "低", "指数数据缺失,无法计算小微盘成交占比。")
     if diff is None:
@@ -90,11 +106,11 @@ def analyze_quant(r: CollectorResult) -> Verdict:
 
 
 def analyze_hot_money(r: CollectorResult) -> Verdict:
-    net = r.metrics.get("famous_seat_net_buy")
-    count = r.metrics.get("famous_seat_count")
-    lhb_net = r.metrics.get("lhb_net_buy")
+    net = _number(r.metrics.get("famous_seat_net_buy"))
+    count = _number(r.metrics.get("famous_seat_count"))
+    lhb_net = _number(r.metrics.get("lhb_net_buy"))
     if net is None and lhb_net is None:
-        return Verdict(None, "高", "龙虎榜数据缺失。")
+        return Verdict(None, "低", "龙虎榜数据缺失。")
     if net is not None and count:
         yi_net = net / 1e8
         score = 0
@@ -106,7 +122,8 @@ def analyze_hot_money(r: CollectorResult) -> Verdict:
             score = -2
         elif yi_net < -0.5:
             score = -1
-        return Verdict(score, "高", f"知名游资席位 {count} 个上榜,合计净买入 {yi_net:+.1f}亿。")
+        count_text = int(count) if count.is_integer() else count
+        return Verdict(score, _confidence(r, "高"), f"知名游资席位 {count_text} 个上榜,合计净买入 {yi_net:+.1f}亿。")
     if lhb_net is not None:
         return Verdict(
             _clamp(round(lhb_net / 2e9)), "中",
@@ -116,18 +133,20 @@ def analyze_hot_money(r: CollectorResult) -> Verdict:
 
 
 def analyze_industrial(r: CollectorResult) -> Verdict:
-    net_count = r.metrics.get("holder_net_count")
-    premium = r.metrics.get("block_trade_premium_pct")
-    rep = r.metrics.get("repurchase_count") or 0
+    net_count = _number(r.metrics.get("holder_net_count"))
+    premium = _number(r.metrics.get("block_trade_premium_pct"))
+    rep = _number(r.metrics.get("repurchase_count")) or 0
     if net_count is None and premium is None:
-        return Verdict(None, "高", "增减持与大宗数据均缺失。")
+        return Verdict(None, "低", "增减持与大宗数据均缺失。")
     score = 0
     parts = []
     if net_count is not None:
+        net_count = int(net_count)
         score += 1 if net_count > 5 else (-1 if net_count < -5 else 0)
         parts.append(f"净增持家数 {net_count:+d}")
     if rep:
-        parts.append(f"回购公告 {rep} 家")
+        rep_text = int(rep) if rep.is_integer() else rep
+        parts.append(f"回购公告 {rep_text} 家")
         if rep >= 20:
             score += 1
     if premium is not None:
@@ -136,14 +155,14 @@ def analyze_industrial(r: CollectorResult) -> Verdict:
             score += 1
         elif premium < 5:
             score -= 1
-    return Verdict(_clamp(score), "高", ";".join(parts) + "。")
+    return Verdict(_clamp(score), _confidence(r, "高"), ";".join(parts) + "。")
 
 
 def analyze_retail(r: CollectorResult) -> Verdict:
-    small = r.metrics.get("small_order_net")
-    margin_chg = r.metrics.get("sse_margin_balance_chg")
+    small = _number(r.metrics.get("small_order_net"))
+    margin_chg = _number(r.metrics.get("sse_margin_balance_chg"))
     if small is None and margin_chg is None:
-        return Verdict(None, "高", "资金流与两融数据均缺失。")
+        return Verdict(None, "低", "资金流与两融数据均缺失。")
     score = 0
     parts = []
     if small is not None:
@@ -152,7 +171,7 @@ def analyze_retail(r: CollectorResult) -> Verdict:
     if margin_chg is not None:
         score += 1 if margin_chg > 3e9 else (-1 if margin_chg < -3e9 else 0)
         parts.append(f"沪市融资余额环比 {margin_chg / 1e8:+.0f}亿")
-    return Verdict(_clamp(score), "高", ";".join(parts) + "。")
+    return Verdict(_clamp(score), _confidence(r, "高"), ";".join(parts) + "。")
 
 
 ANALYZERS = {

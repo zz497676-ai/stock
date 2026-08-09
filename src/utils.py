@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import time
 from datetime import date, datetime, timedelta
 from functools import lru_cache
@@ -21,6 +22,26 @@ MOCK_DATA: dict | None = None
 FETCH_ERRORS: list[str] = []
 
 
+def finite_number(value) -> float | None:
+    """Convert a scalar to a finite float, treating NaN/inf as unavailable."""
+    try:
+        if isinstance(value, str):
+            value = value.replace(",", "").strip()
+        value = pd.to_numeric(value, errors="coerce")
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) else None
+
+
+def finite_numeric_series(values: pd.Series) -> pd.Series:
+    """Convert a Series to numbers while removing NaN and infinite values."""
+    if values.dtype == "object" or pd.api.types.is_string_dtype(values):
+        values = values.astype("string").str.replace(",", "", regex=False).str.strip()
+    numeric = pd.to_numeric(values, errors="coerce")
+    return numeric.replace([float("inf"), float("-inf")], pd.NA)
+
+
 @lru_cache(maxsize=1)
 def load_config() -> dict:
     with open(ROOT / "config.yaml", encoding="utf-8") as f:
@@ -36,6 +57,9 @@ def safe_fetch(
 ) -> pd.DataFrame | None:
     """调用 akshare 接口,单次调用 90 秒硬超时(akshare 请求默认不设超时,
     接口挂起会拖垮整个任务),失败重试;最终失败返回 None 并记录,不中断全局。
+
+    ``retries`` 保持历史兼容含义:表示最多尝试次数(传 1 就只调用一次)。
+    最后一次失败不再额外 sleep,避免失败源把整份日报拖慢。
 
     mock 模式下直接返回 fixtures 中的同名表。
     """
@@ -54,7 +78,8 @@ def safe_fetch(
         FETCH_ERRORS.append(f"{func_name}(akshare 无此接口)")
         return None
     last_err = None
-    for attempt in range(retries):
+    attempts = max(1, int(retries))
+    for attempt in range(attempts):
         pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
         try:
             df = pool.submit(func, *args, **kwargs).result(timeout=hard_timeout)
@@ -62,7 +87,8 @@ def safe_fetch(
             return df
         except Exception as e:  # noqa: BLE001 上游接口异常种类繁多,统一兜底
             last_err = e
-            time.sleep(2 * (attempt + 1))
+            if attempt + 1 < attempts:
+                time.sleep(min(8, 2**attempt))
         finally:
             # 不等待挂起线程,否则超时形同虚设
             pool.shutdown(wait=False, cancel_futures=True)
@@ -80,6 +106,54 @@ def cached_fetch(func_name: str, *args, **kwargs) -> pd.DataFrame | None:
         _CACHE[key] = safe_fetch(func_name, *args, **kwargs)
     df = _CACHE[key]
     return df.copy() if df is not None else None
+
+
+def latest_history_row(
+    name: str,
+    current_date: date,
+    columns: tuple[str, ...],
+    max_age_days: int = 7,
+) -> tuple[dict, date] | None:
+    """返回当前日期之前、仍在允许滞后窗口内的最近历史行。
+
+    只接受至少一个目标字段有值的行,避免把日报失败时写入的空行当成可用
+    快照。调用方必须在报告中标注返回的 ``data_date``;这里不把旧值伪装成
+    当日数据。
+    """
+    hist = load_history(name)
+    if hist.empty or "date" not in hist.columns:
+        return None
+
+    parsed = pd.to_datetime(hist["date"], errors="coerce").dt.date
+    hist = hist.assign(_history_date=parsed)
+    hist = hist[hist["_history_date"].notna()]
+    hist = hist[hist["_history_date"] <= current_date].sort_values("_history_date")
+    if hist.empty:
+        return None
+
+    for _, row in hist.iloc[::-1].iterrows():
+        data_date = row["_history_date"]
+        age = (current_date - data_date).days
+        if age < 0 or age > max_age_days:
+            continue
+        if not any(
+            column in row and finite_number(row[column]) is not None
+            for column in columns
+        ):
+            continue
+        values = row.drop(labels=["_history_date"]).to_dict()
+        return values, data_date
+    return None
+
+
+def freshness_note(label: str, report_date: date, data_date: date, source: str) -> str:
+    """生成统一的降级数据新鲜度说明,避免 stale 数字看起来像当日数据。"""
+    lag = (report_date - data_date).days
+    lag_text = f",滞后 {lag} 个日历日" if lag > 0 else ""
+    return (
+        f"{label}采用{source},数据截至 {data_date.isoformat()}"
+        f"(报告日期 {report_date.isoformat()}{lag_text})。"
+    )
 
 
 def is_trading_day(d: date) -> bool | None:
