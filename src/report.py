@@ -105,6 +105,15 @@ def render(
         "- 个股杠杆排行剔除了流通市值过小的个股(阈值见 config.yaml),"
         "融资余额/买入额与当日行情存在披露时点差异,仅作参考,不构成个股推荐。"
     )
+    all_results = [r for r, _ in results] + ([leverage] if leverage is not None else [])
+    if any(
+        "数据截至" in note or "备用源" in note or "历史快照" in note
+        for result in all_results
+        for note in result.notes
+    ):
+        lines.append(
+            "> ⚠️ 本报告含备用或历史快照数据;每条降级数字均按“数据截至 YYYY-MM-DD”标注真实新鲜度。"
+        )
     if FETCH_ERRORS:
         lines.append("")
         lines.append("**本次运行失败的数据源:**")

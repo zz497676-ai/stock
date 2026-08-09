@@ -151,6 +151,13 @@ def build_mock_data(d: date) -> dict[str, pd.DataFrame]:
                 "今日主力净流入-净额": [-50e8, -42e8],
             }
         ),
+        "stock_market_fund_flow": pd.DataFrame(
+            {
+                "日期": ds[-3:],
+                "小单净流入-净额": [20e8, -10e8, 85e8],
+                "主力净流入-净额": [-15e8, 8e8, -92e8],
+            }
+        ),
         # 个股杠杆监测:沪深两市融资融券明细(T+1 披露,单位:元)
         "stock_margin_detail_sse": pd.DataFrame(
             {
@@ -205,6 +212,15 @@ def build_mock_data(d: date) -> dict[str, pd.DataFrame]:
                 "成交量": [500000.0, 8000000.0, 40000000.0, 9000000.0],
                 "成交额": [80e8, 40e8, 12e8, 210e8],
                 "时间戳": [d.isoformat()] * 4,
+            }
+        ),
+        "stock_zh_a_spot_tx": pd.DataFrame(
+            {
+                "code": ["sh600519", "sz300750"],
+                "turnover": [800000.0, 2100000.0],
+                "zdf": [3.2, -5.1],
+                "zf": [4.0, 6.0],
+                "ltsz": [20000.0, 9000.0],
             }
         ),
         # ---- 市场温度评分 ----

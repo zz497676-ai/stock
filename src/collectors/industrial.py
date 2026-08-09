@@ -7,7 +7,7 @@ from datetime import date
 import pandas as pd
 
 from collectors import CollectorResult
-from utils import cached_fetch, yi
+from utils import cached_fetch, freshness_note, latest_history_row, load_config, yi
 
 
 def _filter_by_date(df: pd.DataFrame, col: str, d: date) -> pd.DataFrame:
@@ -15,17 +15,70 @@ def _filter_by_date(df: pd.DataFrame, col: str, d: date) -> pd.DataFrame:
     return df[ts == d]
 
 
+def _notice_holder_counts(notice: pd.DataFrame | None, trade_date: date) -> tuple[int, int] | None:
+    """从持股变动公告做轻量代理,避免把公告数误称为精确变动股东数。"""
+    required = {"代码", "公告标题", "公告日期"}
+    if notice is None or notice.empty or not required.issubset(notice.columns):
+        return None
+    today = _filter_by_date(notice, "公告日期", trade_date)
+    title = today["公告标题"].astype(str)
+    increase = int(today[title.str.contains("增持", na=False)]["代码"].nunique())
+    decrease = int(today[title.str.contains("减持", na=False)]["代码"].nunique())
+    return increase, decrease
+
+
 def collect(trade_date: date) -> CollectorResult:
     r = CollectorResult(key="industrial", title="产业资本")
 
-    # 股东增减持(东财"高管持股"口径,含大股东与董监高)
+    # 股东增减持(东财"高管持股"口径,含大股东与董监高)。失败时使用
+    # 已由险资模块抓取的持股变动公告做当前日代理,再退到短期历史指标。
+    notice = None
+    notice_fallback_used = False
     for symbol, label, key in (
-        ("股东增持", "增持", "holder_increase"),
-        ("股东减持", "减持", "holder_decrease"),
+        ("股东增持", "增持", "holder_increase_count"),
+        ("股东减持", "减持", "holder_decrease_count"),
     ):
-        df = cached_fetch("stock_ggcg_em", symbol=symbol)
-        if df is None:
-            r.notes.append(f"股东{label}接口今日不可用。")
+        df = cached_fetch("stock_ggcg_em", symbol=symbol, retries=3, hard_timeout=45)
+        valid = df is not None and {
+            "公告日",
+            "代码",
+            "名称",
+            "股东名称",
+            "持股变动信息-变动数量",
+            "持股变动信息-占总股本比例",
+        }.issubset(df.columns)
+        if not valid:
+            if notice is None:
+                # insurance_social 已按相同参数抓过时,这里会命中进程内缓存。
+                notice = cached_fetch(
+                    "stock_notice_report",
+                    symbol="持股变动",
+                    date=trade_date.strftime("%Y%m%d"),
+                )
+            counts = _notice_holder_counts(notice, trade_date)
+            if counts is not None:
+                count = counts[0] if label == "增持" else counts[1]
+                r.metrics[key] = count
+                notice_fallback_used = True
+                continue
+
+            max_stale_days = int(load_config().get("resilience", {}).get("max_stale_days", 7))
+            stale = latest_history_row(
+                "industrial",
+                trade_date,
+                ("holder_increase_count", "holder_decrease_count"),
+                max_age_days=max_stale_days,
+            )
+            if stale is not None:
+                values, data_date = stale
+                value = pd.to_numeric(values.get(key), errors="coerce")
+                if pd.notna(value):
+                    r.metrics[key] = int(value)
+                    r.notes.append(
+                        freshness_note(f"股东{label}", trade_date, data_date, "历史产业资本快照")
+                    )
+                    continue
+            r.notes.append(f"股东{label}接口今日不可用,公告代理与短期历史快照也不可用。")
             continue
         if "持股变动信息-增减" in df.columns:
             df = df[df["持股变动信息-增减"].astype(str).str.contains(label, na=False)]
@@ -60,6 +113,16 @@ def collect(trade_date: date) -> CollectorResult:
                         "amount": None if pd.isna(ratio) else sign * float(ratio),
                     }
                 )
+
+    if notice_fallback_used:
+        r.notes.append(
+            freshness_note(
+                "股东增减持计数",
+                trade_date,
+                trade_date,
+                "stock_notice_report 持股变动公告代理(非精确股东变动明细)",
+            )
+        )
 
     inc = r.metrics.get("holder_increase_count")
     dec = r.metrics.get("holder_decrease_count")

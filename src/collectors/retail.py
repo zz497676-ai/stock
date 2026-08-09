@@ -7,7 +7,9 @@ from datetime import date, timedelta
 import pandas as pd
 
 from collectors import CollectorResult
-from utils import cached_fetch, yi
+from collectors.flow import load_stock_flow
+from collectors.margin import latest_szse_margin
+from utils import cached_fetch, freshness_note, yi
 
 
 def collect(trade_date: date) -> CollectorResult:
@@ -36,25 +38,17 @@ def collect(trade_date: date) -> CollectorResult:
     else:
         r.notes.append("沪市两融接口今日不可用。")
 
-    # 深市两融(单日快照;深交所披露单位为亿元,统一换算成元)
-    szse = cached_fetch("stock_margin_szse", date=trade_date.strftime("%Y%m%d"))
-    if szse is not None and not szse.empty:
-        r.metrics["szse_margin_balance"] = (
-            float(pd.to_numeric(szse.iloc[0]["融资余额"], errors="coerce")) * 1e8
-        )
+    # 深市两融:先取汇总接口,再用个股明细求和,最后短期历史快照兜底。
+    szse = latest_szse_margin(trade_date)
+    if szse is not None:
+        if szse.balance_yuan is not None:
+            r.metrics["szse_margin_balance"] = szse.balance_yuan
+        if szse.buy_yuan is not None:
+            r.metrics["szse_margin_buy"] = szse.buy_yuan
+        if szse.data_date != trade_date or szse.source != "stock_margin_szse":
+            r.notes.append(freshness_note("深市两融", trade_date, szse.data_date, szse.source))
     else:
-        # 两融 T+1 披露,当日取不到时尝试再往前找一天
-        for back in range(1, 4):
-            d2 = trade_date - timedelta(days=back)
-            szse = cached_fetch("stock_margin_szse", date=d2.strftime("%Y%m%d"))
-            if szse is not None and not szse.empty:
-                r.metrics["szse_margin_balance"] = (
-                    float(pd.to_numeric(szse.iloc[0]["融资余额"], errors="coerce")) * 1e8
-                )
-                r.notes.append(f"深市两融取到的最新日期为 {d2}。")
-                break
-        else:
-            r.notes.append("深市两融接口今日不可用。")
+        r.notes.append("深市两融汇总/明细接口及短期历史快照均不可用。")
 
     bal_parts = [r.metrics.get("sse_margin_balance"), r.metrics.get("szse_margin_balance")]
     if all(v is not None for v in bal_parts):
@@ -66,19 +60,28 @@ def collect(trade_date: date) -> CollectorResult:
             f"全市场融资余额约 {yi(total, 0)}(沪 {yi(bal_parts[0], 0)} + 深 {yi(bal_parts[1], 0)}){chg_txt}。"
         )
 
-    # 全市场小单净流入(逐股加总;大盘口径接口在海外 runner 不可用,改用个股排行接口)
-    flow = cached_fetch("stock_individual_fund_flow_rank", indicator="今日")
-    if flow is not None and not flow.empty:
-        small = float(pd.to_numeric(flow["今日小单净流入-净额"], errors="coerce").sum())
-        main = float(pd.to_numeric(flow["今日主力净流入-净额"], errors="coerce").sum())
+    # 全市场小单净流入:优先逐股排行,失败时退到大盘资金流序列(保留总额,
+    # 但不把市场级代理伪装成逐股排名),再退到短期历史快照。
+    flow = load_stock_flow(trade_date)
+    if flow.frame is not None and not flow.frame.empty:
+        small = float(
+            pd.to_numeric(flow.frame["小单净流入-净额" if not flow.has_stock_rows else "今日小单净流入-净额"], errors="coerce")
+            .sum(min_count=1)
+        )
+        main = float(
+            pd.to_numeric(flow.frame["主力净流入-净额" if not flow.has_stock_rows else "今日主力净流入-净额"], errors="coerce")
+            .sum(min_count=1)
+        )
         r.metrics["small_order_net"] = small
         r.metrics["main_force_net"] = main
         r.evidence.append(
-            f"当日全市场小单(散户)净流入合计 {yi(small)},主力净流入合计 {yi(main)}"
-            f"(小单流入而主力流出,通常是散户接盘特征)。"
+            f"全市场小单(散户)净流入合计 {yi(small)},主力净流入合计 {yi(main)}"
+            f"(小单流入而主力流出,通常是散户接盘特征;口径:{flow.source})。"
         )
+        if flow.source != "个股资金流排行" or flow.data_date != trade_date:
+            r.notes.append(freshness_note("资金流", trade_date, flow.data_date, flow.source))
     else:
-        r.notes.append("个股资金流排行接口今日不可用,小单口径缺失。")
+        r.notes.append("个股资金流排行、大盘资金流代理及短期历史快照均不可用,小单口径缺失。")
 
     # 月度新增开户(低频佐证;返回表顺序不定,按数据日期排序后取最新)
     acct = cached_fetch("stock_account_statistics_em")
