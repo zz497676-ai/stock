@@ -15,11 +15,12 @@ from datetime import date, timedelta
 import pandas as pd
 
 from collectors import CollectorResult
-from collectors.margin import latest_szse_margin
+from collectors.margin import latest_sse_margin, latest_szse_margin
 from collectors.market_common import sse_stock_turnover, szse_stock_turnover
 from utils import (
     ROOT,
     cached_fetch,
+    finite_numeric_series,
     freshness_note,
     load_config,
     load_history,
@@ -28,29 +29,10 @@ from utils import (
 
 
 def _sse_margin_buy_on(trade_date: date) -> tuple[float | None, date | None]:
-    start = (trade_date - timedelta(days=70)).strftime("%Y%m%d")
-    df = cached_fetch(
-        "stock_margin_sse",
-        start_date=start,
-        end_date=trade_date.strftime("%Y%m%d"),
-        retries=3,
-        hard_timeout=30,
-    )
-    if df is None or df.empty or "信用交易日期" not in df.columns:
+    snapshot = latest_sse_margin(trade_date)
+    if snapshot is None:
         return None, None
-    df = df.copy()
-    parsed = pd.to_datetime(df["信用交易日期"].astype(str), format="%Y%m%d", errors="coerce")
-    if parsed.isna().all():
-        parsed = pd.to_datetime(df["信用交易日期"], errors="coerce")
-    df["_d"] = parsed.dt.date
-    df = df[df["_d"].notna() & (df["_d"] <= trade_date)].sort_values("_d")
-    if df.empty or "融资买入额" not in df.columns:
-        return None, None
-    for _, row in df.iloc[::-1].iterrows():
-        value = pd.to_numeric(row["融资买入额"], errors="coerce")
-        if pd.notna(value):
-            return float(value), row["_d"]
-    return None, None
+    return snapshot.buy_yuan, snapshot.buy_date or snapshot.data_date
 
 
 def _szse_margin_buy_on(
@@ -69,6 +51,20 @@ def _normalise_code(series: pd.Series) -> pd.Series:
         .fillna("")
         .str.zfill(6)
     )
+
+
+def _clean_quote_frame(frame: pd.DataFrame) -> pd.DataFrame | None:
+    """Keep only rows usable for a ratio calculation."""
+    required = ["代码", "成交额", "流通市值", "涨跌幅", "振幅"]
+    if not set(required).issubset(frame.columns):
+        return None
+    result = frame[required].copy()
+    result["代码"] = _normalise_code(result["代码"])
+    result = result[result["代码"] != "000000"].copy()
+    for column in required[1:]:
+        result[column] = finite_numeric_series(result[column])
+    result = result[result["成交额"].notna() & (result["成交额"] >= 0)]
+    return result if not result.empty else None
 
 
 def _normalise_spot_tx(df: pd.DataFrame) -> pd.DataFrame | None:
@@ -102,14 +98,12 @@ def _normalise_spot_tx(df: pd.DataFrame) -> pd.DataFrame | None:
                 result[target] = pd.to_numeric(result[target], errors="coerce") * 1e8
     if "代码" not in result or "成交额" not in result:
         return None
-    result["代码"] = _normalise_code(result["代码"])
-    result = result[result["代码"] != "000000"].copy()
     if "振幅" not in result:
         required = {"最高", "最低", "昨收"}
         if required.issubset(result.columns):
-            high = pd.to_numeric(result["最高"], errors="coerce")
-            low = pd.to_numeric(result["最低"], errors="coerce")
-            prev_close = pd.to_numeric(result["昨收"], errors="coerce")
+            high = finite_numeric_series(result["最高"])
+            low = finite_numeric_series(result["最低"])
+            prev_close = finite_numeric_series(result["昨收"])
             result["振幅"] = (high - low) / prev_close * 100
         else:
             result["振幅"] = float("nan")
@@ -117,8 +111,14 @@ def _normalise_spot_tx(df: pd.DataFrame) -> pd.DataFrame | None:
         result["涨跌幅"] = float("nan")
     if "流通市值" not in result:
         result["流通市值"] = float("nan")
-    required = ["代码", "成交额", "流通市值", "涨跌幅", "振幅"]
-    return result[required]
+    return _clean_quote_frame(result)
+
+
+def _normalise_spot_em(df: pd.DataFrame) -> pd.DataFrame | None:
+    required = {"代码", "成交额", "流通市值", "涨跌幅", "振幅"}
+    if not required.issubset(df.columns):
+        return None
+    return _clean_quote_frame(df)
 
 
 def _spot_quote() -> tuple[pd.DataFrame | None, bool, str | None]:
@@ -136,10 +136,11 @@ def _spot_quote() -> tuple[pd.DataFrame | None, bool, str | None]:
     """
     em = cached_fetch("stock_zh_a_spot_em", retries=1, hard_timeout=20)
     if em is not None and not em.empty:
-        required = {"代码", "成交额", "流通市值", "涨跌幅", "振幅"}
-        if required.issubset(em.columns):
-            df = em[list(required)].copy()
-            return df[["代码", "成交额", "流通市值", "涨跌幅", "振幅"]], True, "东方财富"
+        normalised = _normalise_spot_em(em)
+        if normalised is not None:
+            has_mcap = normalised["流通市值"].notna().any()
+            if has_mcap:
+                return normalised, True, "东方财富"
 
     # 腾讯接口和东财/新浪不同域名,响应只做字段兼容归一化。
     tx = cached_fetch("stock_zh_a_spot_tx", retries=1, hard_timeout=35)
@@ -151,14 +152,17 @@ def _spot_quote() -> tuple[pd.DataFrame | None, bool, str | None]:
 
     sina = cached_fetch("stock_zh_a_spot", retries=1, hard_timeout=45)
     if sina is not None and not sina.empty:
-        df = sina.copy()
-        df["代码"] = df["代码"].astype(str).str.extract(r"(\d{6})", expand=False)
-        high = pd.to_numeric(df["最高"], errors="coerce")
-        low = pd.to_numeric(df["最低"], errors="coerce")
-        prev_close = pd.to_numeric(df["昨收"], errors="coerce")
-        df["振幅"] = (high - low) / prev_close * 100
-        df["流通市值"] = float("nan")
-        return df[["代码", "成交额", "流通市值", "涨跌幅", "振幅"]], False, "新浪"
+        required = {"代码", "成交额", "涨跌幅", "最高", "最低", "昨收"}
+        if required.issubset(sina.columns):
+            df = sina.copy()
+            high = finite_numeric_series(df["最高"])
+            low = finite_numeric_series(df["最低"])
+            prev_close = finite_numeric_series(df["昨收"])
+            df["振幅"] = (high - low) / prev_close * 100
+            df["流通市值"] = float("nan")
+            normalised = _clean_quote_frame(df)
+            if normalised is not None:
+                return normalised, False, "新浪"
 
     return None, False, None
 
@@ -176,7 +180,10 @@ def _margin_detail_on(trade_date: date) -> tuple[pd.DataFrame | None, date | Non
             ["代码", "名称", "融资余额", "融资买入额"]
         ].copy()
         out["代码"] = _normalise_code(out["代码"])
-        out = out[out["代码"] != "000000"]
+        out = out[out["代码"] != "000000"].copy()
+        out["融资余额"] = finite_numeric_series(out["融资余额"])
+        out["融资买入额"] = finite_numeric_series(out["融资买入额"])
+        out = out[out["融资余额"].notna() | out["融资买入额"].notna()]
         return out if not out.empty else None
 
     for back in range(0, 4):
@@ -263,11 +270,14 @@ def build_stock_table(trade_date: date) -> tuple[pd.DataFrame | None, date | Non
     detail = detail.copy()
     detail["代码"] = _normalise_code(detail["代码"])
     merged = detail.merge(spot, on="代码", how="inner")
-    merged["成交额"] = pd.to_numeric(merged["成交额"], errors="coerce")
-    merged["流通市值"] = pd.to_numeric(merged["流通市值"], errors="coerce")
+    merged["成交额"] = finite_numeric_series(merged["成交额"])
+    merged["流通市值"] = finite_numeric_series(merged["流通市值"])
+    merged["融资买入额"] = finite_numeric_series(merged["融资买入额"])
+    merged["融资余额"] = finite_numeric_series(merged["融资余额"])
     # 成交额过小的个股比例噪声大(分母太小),没有流通市值兜底过滤时额外设个下限
+    merged = merged[merged["成交额"].notna() & (merged["成交额"] > 0) & merged["融资买入额"].notna()]
     if has_mcap:
-        merged = merged[(merged["流通市值"] >= min_mcap) & (merged["成交额"] > 0)]
+        merged = merged[merged["流通市值"].notna() & (merged["流通市值"] >= min_mcap)]
     else:
         merged = merged[merged["成交额"] >= 3e7]
     if merged.empty:
@@ -277,7 +287,7 @@ def build_stock_table(trade_date: date) -> tuple[pd.DataFrame | None, date | Non
         pd.to_numeric(merged["融资买入额"], errors="coerce") / merged["成交额"] * 100
     )
     merged["融资余额占流通市值%"] = (
-        pd.to_numeric(merged["融资余额"], errors="coerce") / merged["流通市值"] * 100
+        merged["融资余额"] / merged["流通市值"] * 100
         if has_mcap
         else float("nan")
     )
@@ -292,6 +302,7 @@ def build_stock_table(trade_date: date) -> tuple[pd.DataFrame | None, date | Non
     full.attrs["stale"] = False
     full.attrs["quote_source"] = spot_source
     full.attrs["detail_missing_sources"] = detail.attrs.get("missing_sources", [])
+    full.attrs["mcap_complete"] = bool(full["融资余额占流通市值%"].notna().all())
     return full, detail_date, has_mcap
 
 
@@ -307,7 +318,14 @@ def collect(trade_date: date) -> CollectorResult:
     sh_turnover = sse_stock_turnover(trade_date)
     sz_turnover = szse_stock_turnover(trade_date)
 
-    if sse_buy is not None and szse_buy is not None and sh_turnover and sz_turnover:
+    if (
+        sse_buy is not None
+        and szse_buy is not None
+        and sh_turnover is not None
+        and sz_turnover is not None
+        and sh_turnover > 0
+        and sz_turnover > 0
+    ):
         buy_total = sse_buy + szse_buy
         turnover_total = sh_turnover + sz_turnover
         r.metrics["margin_buy_total"] = buy_total
@@ -327,15 +345,28 @@ def collect(trade_date: date) -> CollectorResult:
                 f"当日两融资金参与度(融资买入额/两市成交额)约 {leverage_pct:.2f}%{base_txt}"
                 "(比例越高说明当日交易中加杠杆买入的比重越大,市场波动风险通常也更高)。"
             )
-            if margin_data_date != trade_date or szse_source != "stock_margin_szse":
+            if sse_date != trade_date and sse_date is not None:
                 r.notes.append(
                     freshness_note(
-                        "市场两融融资买入额",
+                        "沪市融资买入额",
                         trade_date,
-                        margin_data_date,
-                        f"沪市/深市最近可用快照({szse_source})",
+                        sse_date,
+                        "stock_margin_sse",
                     )
                 )
+            if (
+                szse_source != "stock_margin_szse"
+                or (szse_date is not None and szse_date != trade_date)
+            ):
+                if szse_date is not None:
+                    r.notes.append(
+                        freshness_note(
+                            "深市融资买入额",
+                            trade_date,
+                            szse_date,
+                            szse_source or "深市两融备用源",
+                        )
+                    )
     else:
         missing = [
             n
@@ -385,7 +416,8 @@ def collect(trade_date: date) -> CollectorResult:
                     f"个股两融明细缺失{'、'.join(missing_sources)},排行仅使用可用市场明细"
                     f"(数据截至 {detail_date.isoformat()})。"
                 )
-        if has_mcap:
+        mcap_available = has_mcap and full["融资余额占流通市值%"].notna().any()
+        if mcap_available:
             alert_count = int((full["融资余额占流通市值%"] >= alert_pct).sum())
             r.metrics["leverage_top_alert_count"] = alert_count
             date_label = f"截至 {detail_date.isoformat()}" if full.attrs.get("stale") else "当日"

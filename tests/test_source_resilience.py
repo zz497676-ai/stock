@@ -8,8 +8,10 @@ from unittest.mock import patch
 
 import pandas as pd
 
+from analyzer import analyze
 import utils
 from collectors import flow, industrial, leverage, margin, retail
+from report import render
 
 
 REPORT_DATE = date(2026, 8, 10)
@@ -67,6 +69,134 @@ class SourceResilienceTests(unittest.TestCase):
         self.assertEqual(result.metrics["small_order_net"], 85e8)
         self.assertEqual(result.metrics["main_force_net"], -92e8)
         self.assertTrue(any("数据截至 2026-08-10" in note for note in result.notes))
+
+    def test_partial_sse_margin_preserves_balance_without_buy_metric(self) -> None:
+        utils.MOCK_DATA = {
+            "stock_margin_sse": pd.DataFrame(
+                {
+                    "信用交易日期": ["20260809", "20260810"],
+                    "融资余额": [90e8, 100e8],
+                    "融资买入额": [None, None],
+                }
+            )
+        }
+
+        snapshot = margin.latest_sse_margin(REPORT_DATE)
+
+        self.assertIsNotNone(snapshot)
+        assert snapshot is not None
+        self.assertEqual(snapshot.balance_yuan, 100e8)
+        self.assertIsNone(snapshot.buy_yuan)
+        self.assertEqual(snapshot.balance_date, REPORT_DATE)
+        self.assertIsNone(snapshot.buy_date)
+
+    def test_partial_flow_keeps_small_orders_and_does_not_fill_main_with_zero(self) -> None:
+        utils.MOCK_DATA = {
+            "stock_individual_fund_flow_rank": pd.DataFrame(
+                {
+                    "代码": ["000001"],
+                    "名称": ["平安银行"],
+                    "今日小单净流入-净额": [12e8],
+                    "今日主力净流入-净额": [None],
+                }
+            )
+        }
+
+        snapshot = flow.load_stock_flow(REPORT_DATE)
+        result = retail.collect(REPORT_DATE)
+
+        self.assertTrue(snapshot.has_stock_rows)
+        self.assertEqual(result.metrics["small_order_net"], 12e8)
+        self.assertNotIn("main_force_net", result.metrics)
+        self.assertTrue(any("缺少主力字段" in note for note in result.notes))
+        self.assertFalse(any("主力净流入合计" in evidence for evidence in result.evidence))
+
+    def test_malformed_eastmoney_spot_falls_through_to_tencent(self) -> None:
+        malformed = pd.DataFrame(
+            {
+                "代码": ["sh600519"],
+                "成交额": [None],
+                "流通市值": [None],
+                "涨跌幅": [None],
+                "振幅": [None],
+            }
+        )
+        tx = pd.DataFrame(
+            {
+                "code": ["sh600519"],
+                "turnover": [800000.0],
+                "zdf": [3.2],
+                "zf": [4.0],
+                "ltsz": [20000.0],
+            }
+        )
+
+        def fetch(name: str, *args, **kwargs):
+            if name == "stock_zh_a_spot_em":
+                return malformed
+            if name == "stock_zh_a_spot_tx":
+                return tx
+            return None
+
+        with patch.object(leverage, "cached_fetch", side_effect=fetch):
+            spot, has_mcap, source = leverage._spot_quote()
+
+        self.assertEqual(source, "腾讯")
+        self.assertTrue(has_mcap)
+        self.assertIsNotNone(spot)
+        assert spot is not None
+        self.assertEqual(spot.iloc[0]["代码"], "600519")
+
+    def test_valid_holder_source_uses_stable_metric_names(self) -> None:
+        holder = pd.DataFrame(
+            {
+                "代码": ["000001", "600519"],
+                "名称": ["平安银行", "贵州茅台"],
+                "股东名称": ["股东甲", "股东乙"],
+                "持股变动信息-增减": ["增持", "减持"],
+                "持股变动信息-变动数量": [1000, -500],
+                "持股变动信息-占总股本比例": [0.1, 0.05],
+                "公告日": [REPORT_DATE.isoformat()] * 2,
+            }
+        )
+        utils.MOCK_DATA = {
+            "stock_ggcg_em": holder,
+            "stock_repurchase_em": pd.DataFrame(),
+            "stock_dzjy_sctj": pd.DataFrame(),
+            "stock_dzjy_mrmx": pd.DataFrame(),
+        }
+
+        result = industrial.collect(REPORT_DATE)
+
+        self.assertEqual(result.metrics["holder_increase_count"], 1)
+        self.assertEqual(result.metrics["holder_decrease_count"], 1)
+        self.assertEqual(result.metrics["holder_net_count"], 0)
+        self.assertNotIn("holder_increase_count_count", result.metrics)
+
+    def test_nan_retail_inputs_do_not_produce_direction(self) -> None:
+        result = retail.CollectorResult(
+            key="retail",
+            title="普通散户",
+            metrics={"small_order_net": float("nan"), "sse_margin_balance_chg": float("inf")},
+        )
+
+        verdict = analyze(result)
+
+        self.assertIsNone(verdict.strength)
+        self.assertEqual(verdict.confidence, "低")
+
+    def test_report_summarizes_missing_data_quality_without_claiming_zero(self) -> None:
+        result = retail.CollectorResult(
+            key="retail",
+            title="普通散户",
+            notes=["缺失:沪市融资余额,全市场融资余额合计不计算。"],
+        )
+
+        content = render(REPORT_DATE, [(result, analyze(result))])
+
+        self.assertIn("数据质量提示", content)
+        self.assertIn("缺失字段不补零", content)
+        self.assertIn("全市场融资余额合计不计算", content)
 
     def test_holder_change_uses_current_notice_proxy(self) -> None:
         notice = pd.DataFrame(

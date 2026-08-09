@@ -16,7 +16,7 @@ import pandas as pd
 
 import utils
 from analyzer import analyze
-from collectors.flow import load_stock_flow
+from collectors.flow import load_stock_flow, value_series
 from collectors import leverage
 from report import render, write_report
 from utils import append_events, is_trading_day, load_config, today_cst, upsert_history
@@ -99,24 +99,33 @@ def run(trade_date: date, mock: bool = False, skip_calendar: bool = False) -> in
             # 个股事件,但它仍会在普通散户日报段落保留可用总额。
             if flow is not None and not flow.empty and flow_snapshot.has_stock_rows:
                 flow = flow.copy()
-                flow["_main"] = pd.to_numeric(flow["今日主力净流入-净额"], errors="coerce")
-                flow["_small"] = pd.to_numeric(flow["今日小单净流入-净额"], errors="coerce")
+                flow["_main"] = value_series(flow, "main")
+                flow["_small"] = value_series(flow, "small")
+                flow["_rank"] = flow["_main"].fillna(flow["_small"])
+                flow = flow[flow["_rank"].notna()].copy()
                 event_codes = {e["code"] for e in events}
                 top_codes = set(
-                    flow.reindex(flow["_main"].abs().sort_values(ascending=False).index)
+                    flow.reindex(flow["_rank"].abs().sort_values(ascending=False).index)
                     .head(top_n)["代码"].astype(str)
                 )
                 wanted = event_codes | top_codes
                 flow = flow[flow["代码"].astype(str).isin(wanted)]
                 for _, row in flow.iterrows():
                     small, main_f = row["_small"], row["_main"]
+                    if pd.isna(small) and pd.isna(main_f):
+                        continue
+                    detail = []
+                    if pd.notna(small):
+                        detail.append(f"当日小单净流入 {small / 1e8:+.2f}亿")
+                    if pd.notna(main_f):
+                        detail.append(f"主力净流入 {main_f / 1e8:+.2f}亿")
                     events.append(
                         {
                             "code": str(row["代码"]),
                             "name": str(row["名称"]),
                             "category": "普通散户",
                             "type": "资金流",
-                            "detail": f"当日小单净流入 {small / 1e8:+.2f}亿,主力净流入 {main_f / 1e8:+.2f}亿",
+                            "detail": ",".join(detail),
                             "amount": None if pd.isna(main_f) else float(main_f),
                         }
                     )

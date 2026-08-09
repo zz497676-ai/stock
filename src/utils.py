@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import time
 from datetime import date, datetime, timedelta
 from functools import lru_cache
@@ -19,6 +20,26 @@ MOCK_DATA: dict | None = None
 
 # 本次运行中各数据源的失败记录,报告结尾会列出
 FETCH_ERRORS: list[str] = []
+
+
+def finite_number(value) -> float | None:
+    """Convert a scalar to a finite float, treating NaN/inf as unavailable."""
+    try:
+        if isinstance(value, str):
+            value = value.replace(",", "").strip()
+        value = pd.to_numeric(value, errors="coerce")
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) else None
+
+
+def finite_numeric_series(values: pd.Series) -> pd.Series:
+    """Convert a Series to numbers while removing NaN and infinite values."""
+    if values.dtype == "object" or pd.api.types.is_string_dtype(values):
+        values = values.astype("string").str.replace(",", "", regex=False).str.strip()
+    numeric = pd.to_numeric(values, errors="coerce")
+    return numeric.replace([float("inf"), float("-inf")], pd.NA)
 
 
 @lru_cache(maxsize=1)
@@ -116,10 +137,7 @@ def latest_history_row(
         if age < 0 or age > max_age_days:
             continue
         if not any(
-            column in row
-            and pd.notna(row[column])
-            and str(row[column]).strip()
-            and str(row[column]).lower() != "nan"
+            column in row and finite_number(row[column]) is not None
             for column in columns
         ):
             continue
