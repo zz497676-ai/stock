@@ -35,8 +35,8 @@
 <text x="68" y="106.7" font-size="11" text-anchor="end" class="mut">9.3</text>
 <line x1="76" y1="52.0" x2="736" y2="52.0" class="grid"/>
 <text x="68" y="56.0" font-size="11" text-anchor="end" class="mut">10.7</text>
-<polyline points="76.0,154.6 112.7,74.8 149.3,73.3 186.0,153.0 222.7,66.7 259.3,78.1 296.0,104.4 332.7,125.7 369.3,100.3 406.0,87.2 442.7,133.3 479.3,129.4 516.0,118.4 552.7,107.7 589.3,82.5 626.0,189.3 662.7,148.0 699.3,174.0 736.0,104.7" class="line"/>
-<circle cx="736.0" cy="104.7" r="5" class="dot"/>
-<text x="736.0" y="92.7" font-size="12" font-weight="600" text-anchor="end">9.3</text>
+<polyline points="76.0,154.6 110.7,74.8 145.5,73.3 180.2,153.0 214.9,66.7 249.7,78.1 284.4,104.4 319.2,125.7 353.9,100.3 388.6,87.2 423.4,133.3 458.1,129.4 492.8,118.4 527.6,107.7 562.3,82.5 597.1,189.3 631.8,148.0 666.5,174.0 701.3,104.7 736.0,124.7" class="line"/>
+<circle cx="736.0" cy="124.7" r="5" class="dot"/>
+<text x="736.0" y="112.7" font-size="12" font-weight="600" text-anchor="end">8.7</text>
 <text x="76" y="228" font-size="10" class="mut">2026-07-17</text>
-<text x="736" y="228" font-size="10" text-anchor="end" class="mut">2026-09-17</text></svg>
+<text x="736" y="228" font-size="10" text-anchor="end" class="mut">2026-09-22</text></svg>
