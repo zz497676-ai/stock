@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 398" width="760" role="img">
-<title>七类资金今日动向 2026-10-09</title>
+<title>七类资金今日动向 2026-10-13</title>
 
   <style>
     text { font-family: system-ui, -apple-system, "Segoe UI", "PingFang SC",
@@ -25,7 +25,7 @@
     }
   </style>
 <rect x="0" y="0" width="760" height="398" class="surface" rx="8"/>
-<text x="20" y="30" font-size="16" font-weight="600">七类资金今日动向 · 2026-10-09</text>
+<text x="20" y="30" font-size="16" font-weight="600">七类资金今日动向 · 2026-10-13</text>
 <text x="740" y="30" font-size="12" text-anchor="end" class="mut">红=流入 蓝=流出 · 深浅=强弱</text>
 <line x1="172.3" y1="48" x2="172.3" y2="368" class="grid"/>
 <text x="172.3" y="384" font-size="11" text-anchor="middle" class="mut">强流出</text>
