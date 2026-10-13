@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 398" width="760" role="img">
-<title>七类资金今日动向 2026-10-13</title>
+<title>七类资金今日动向 2026-10-14</title>
 
   <style>
     text { font-family: system-ui, -apple-system, "Segoe UI", "PingFang SC",
@@ -25,7 +25,7 @@
     }
   </style>
 <rect x="0" y="0" width="760" height="398" class="surface" rx="8"/>
-<text x="20" y="30" font-size="16" font-weight="600">七类资金今日动向 · 2026-10-13</text>
+<text x="20" y="30" font-size="16" font-weight="600">七类资金今日动向 · 2026-10-14</text>
 <text x="740" y="30" font-size="12" text-anchor="end" class="mut">红=流入 蓝=流出 · 深浅=强弱</text>
 <line x1="172.3" y1="48" x2="172.3" y2="368" class="grid"/>
 <text x="172.3" y="384" font-size="11" text-anchor="middle" class="mut">强流出</text>
@@ -38,13 +38,13 @@
 <line x1="617.7" y1="48" x2="617.7" y2="368" class="grid"/>
 <text x="617.7" y="384" font-size="11" text-anchor="middle" class="mut">强流入</text>
 <text x="138" y="82.0" font-size="13" text-anchor="end">国家队</text>
-<text x="395.0" y="82.0" font-size="12" text-anchor="middle" class="mut">— 数据不足</text>
-<text x="736" y="82.0" font-size="11" text-anchor="end" class="sec">置信度 低</text>
+<circle cx="395.0" cy="78.0" r="5" class="neutral" stroke="#898781" stroke-width="1"/>
+<text x="736" y="82.0" font-size="11" text-anchor="end" class="sec">置信度 中</text>
 <text x="138" y="126.0" font-size="13" text-anchor="end">险资与社保</text>
 <circle cx="395.0" cy="122.0" r="5" class="neutral" stroke="#898781" stroke-width="1"/>
 <text x="736" y="126.0" font-size="11" text-anchor="end" class="sec">置信度 低</text>
 <text x="138" y="170.0" font-size="13" text-anchor="end">公募基金(附:主观私募)</text>
-<text x="395.0" y="170.0" font-size="12" text-anchor="middle" class="mut">— 数据不足</text>
+<circle cx="395.0" cy="166.0" r="5" class="neutral" stroke="#898781" stroke-width="1"/>
 <text x="736" y="170.0" font-size="11" text-anchor="end" class="sec">置信度 低</text>
 <text x="138" y="214.0" font-size="13" text-anchor="end">量化资金</text>
 <text x="395.0" y="214.0" font-size="12" text-anchor="middle" class="mut">— 数据不足</text>
