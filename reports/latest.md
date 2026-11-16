@@ -1,4 +1,4 @@
-# A股资金动向日报 · 2026-11-13
+# A股资金动向日报 · 2026-11-17
 
 > 本报告由公开数据自动生成。**方向结论按数据可得性标注置信度**:
 > 高=每日硬数据(龙虎榜/公告/两融);中=每日代理指标(行为推断);低=仅低频或间接证据。
@@ -7,17 +7,17 @@
 
 ## 一、七类资金动向总览
 
-![七类资金今日动向](charts/overview-2026-11-13.svg)
+![七类资金今日动向](charts/overview-2026-11-17.svg)
 
 | 参与者 | 动向 | 置信度 | 一句话解读 |
 | --- | --- | --- | --- |
 | 国家队 | — 数据不足 | 低 | ETF数据缺失,无法判断。 |
 | 险资与社保 | → 中性 | 低 | 无涉险资/社保公告;险资无每日数据,默认视为中性。 |
-| 公募基金(附:主观私募) | — 数据不足 | 低 | 数据不足。 |
+| 公募基金(附:主观私募) | → 中性 | 低 | ETF份额环比待历史累积;近7天新发权益基金 9亿份。 |
 | 量化资金 | — 数据不足 | 低 | 指数数据缺失,无法计算小微盘成交占比。 |
 | 游资 | — 数据不足 | 低 | 龙虎榜数据缺失。 |
-| 产业资本 | ↑ 流入 | 中 | 净增持家数 +5;回购公告 21 家。 |
-| 普通散户 | → 中性 | 中 | 小单净流入 +423亿;沪市融资余额环比 -38亿。 |
+| 产业资本 | ↑ 流入 | 中 | 净增持家数 +3;回购公告 28 家。 |
+| 普通散户 | → 中性 | 中 | 小单净流入 +423亿;沪市融资余额环比 -87亿。 |
 
 **历史趋势(随每日运行更新)**
 
@@ -36,13 +36,23 @@
 
 ### 2.2 险资与社保 — → 中性(置信度:低)
 
-- 当日扫描持股变动公告 7 条,未发现涉险资/社保/举牌关键词。
+- 当日扫描持股变动公告 4 条,未发现涉险资/社保/举牌关键词。
 
 > ⚠️ 险资/社保没有每日持仓披露:硬数据仅有季报十大流通股东与举牌公告,本节结论置信度恒为低,建议结合季报数据人工复核。
 
-### 2.3 公募基金(附:主观私募) — — 数据不足(置信度:低)
+### 2.3 公募基金(附:主观私募) — → 中性(置信度:低)
 
-- 近7天新成立权益类基金 0 只,合计募集 0.0亿份(反映公募增量资金入场节奏)。
+- 近7天新成立权益类基金 8 只,合计募集 9.3亿份(反映公募增量资金入场节奏)。
+
+**近7天新成立权益基金(募集前5)**
+
+| 基金代码 | 基金简称 | 基金类型 | 募集份额 | 成立日期 |
+| --- | --- | --- | --- | --- |
+| 028845 | 华夏国证粮食产业ETF联接A | 指数型-股票 | 2.33 | 2026-11-10 |
+| 028846 | 华夏国证粮食产业ETF联接C | 指数型-股票 | 2.33 | 2026-11-10 |
+| 027836 | 东财中证工业有色金属指数A | 指数型-股票 | 2.1 | 2026-11-10 |
+| 027837 | 东财中证工业有色金属指数C | 指数型-股票 | 2.1 | 2026-11-10 |
+| 029032 | 富国中证全指医疗器械ETF发起式联接C | 指数型-股票 | 0.12 | 2026-11-10 |
 
 > ⚠️ ETF实时快照接口今日不可用。
 > ⚠️ 主观私募无每日公开持仓/仓位数据,通常仅有第三方月频仓位调查;本报告不对主观私募单独给出每日方向判断。
@@ -61,33 +71,33 @@
 
 ### 2.6 产业资本 — ↑ 流入(置信度:中)
 
-- 当日增持公告 6 家,减持公告 1 家,净增持家数 +5。
-- 当日更新回购公告 21 家,披露已回购金额合计 18.4亿。
+- 当日增持公告 3 家,减持公告 0 家,净增持家数 +3。
+- 当日更新回购公告 28 家,披露已回购金额合计 11.4亿。
 
-> ⚠️ 股东增减持计数采用stock_notice_report 持股变动公告代理(非精确股东变动明细),数据截至 2026-11-13(报告日期 2026-11-13)。
+> ⚠️ 股东增减持计数采用stock_notice_report 持股变动公告代理(非精确股东变动明细),数据截至 2026-11-17(报告日期 2026-11-17)。
 > ⚠️ 大宗交易市场统计尚未更新到当日。
 > ⚠️ 大宗交易个股明细接口今日不可用。
 
 ### 2.7 普通散户 — → 中性(置信度:中)
 
-- 全市场融资余额约 22633亿(沪 11744亿 + 深 10889亿),沪市环比 -38.0亿。
-- 全市场小单(散户)净流入合计 423.3亿、主力净流入合计 -524.1亿(小单流入而主力流出,通常是散户接盘特征)(口径:大盘资金流接口(全市场代理))。
+- 全市场融资余额约 22498亿(沪 11693亿 + 深 10805亿),沪市环比 -86.7亿。
+- 全市场小单(散户)净流入合计 423.3亿、主力净流入合计 -524.1亿(小单流入而主力流出,通常是散户接盘特征)(口径:历史资金流快照)。
 - 最近披露月份(2023-08)新增投资者 99.59 万户,环比 +9.4%(月频指标;该月度口径中登公司已停止披露,仅作历史参考)。
 
-> ⚠️ 沪市融资余额采用历史两融快照,数据截至 2026-11-12(报告日期 2026-11-13,滞后 1 个日历日)。
-> ⚠️ 沪市融资买入额采用历史两融快照,数据截至 2026-11-12(报告日期 2026-11-13,滞后 1 个日历日)。
-> ⚠️ 深市融资余额采用stock_margin_szse,数据截至 2026-11-11(报告日期 2026-11-13,滞后 2 个日历日)。
-> ⚠️ 深市融资买入额采用stock_margin_szse,数据截至 2026-11-11(报告日期 2026-11-13,滞后 2 个日历日)。
-> ⚠️ 资金流采用大盘资金流接口(全市场代理),数据截至 2026-11-12(报告日期 2026-11-13,滞后 1 个日历日)。
+> ⚠️ 沪市融资余额采用stock_margin_sse,数据截至 2026-11-13(报告日期 2026-11-17,滞后 4 个日历日)。
+> ⚠️ 沪市融资买入额采用stock_margin_sse,数据截至 2026-11-13(报告日期 2026-11-17,滞后 4 个日历日)。
+> ⚠️ 深市融资余额采用stock_margin_szse,数据截至 2026-11-13(报告日期 2026-11-17,滞后 4 个日历日)。
+> ⚠️ 深市融资买入额采用stock_margin_szse,数据截至 2026-11-13(报告日期 2026-11-17,滞后 4 个日历日)。
+> ⚠️ 资金流采用历史资金流快照,数据截至 2026-11-13(报告日期 2026-11-17,滞后 4 个日历日)。
 
 ## 三、个股杠杆监测
 
 ![两融资金参与度](charts/leverage.svg)
 
 - 国家队(汇金系宽基ETF)历来是现金申购,不使用融资杠杆,因此没有可比的每日"国家队杠杆"数字;下面的杠杆水位与排行反映的主要是散户与游资的两融行为。
-- 当日纳入统计的1653只个股中,181只融资余额占流通市值超过8%(阈值见 config.yaml);建议持有这类个股时使用更紧的止损比例(参考仓位/止损计算器,该工具支持按代码查询个股杠杆水位)。
+- 截至 2026-11-11纳入统计的1653只个股中,181只融资余额占流通市值超过8%(阈值见 config.yaml);建议持有这类个股时使用更紧的止损比例(参考仓位/止损计算器,该工具支持按代码查询个股杠杆水位)。
 
-**个股杠杆最集中(前15只,2026-11-11两融数据)**
+**个股杠杆最集中(前15只,2026-11-11两融数据，历史快照)**
 
 | 代码 | 名称 | 融资买入占成交额% | 融资余额占流通市值% | 当日涨跌幅% | 当日振幅% |
 | --- | --- | --- | --- | --- | --- |
@@ -108,8 +118,7 @@
 | 002303 | 美盈森 | 20.95 | 6.76 | -1.22 | 3.05 |
 
 > ⚠️ 缺失:沪市成交额、深市成交额,市场整体杠杆水位无法计算。
-> ⚠️ 实时行情快照主源不可用,本次排行采用腾讯备用源(数据截至 2026-11-13)。
-> ⚠️ 个股两融明细缺失沪市,排行仅使用可用市场明细(数据截至 2026-11-11)。
+> ⚠️ 个股杠杆排行采用本地历史快照,数据截至 2026-11-11(报告日期 2026-11-17,滞后 6 个日历日)。
 
 ## 四、数据说明与局限
 
@@ -127,35 +136,42 @@
 - 量化资金: 指数行情缺失:中证2000、上证综指、深证综指,量化活跃度无法计算。
 - 游资: 龙虎榜个股明细接口今日不可用。
 - 游资: 活跃营业部接口今日不可用,席位识别缺失。
-- 产业资本: 股东增减持计数采用stock_notice_report 持股变动公告代理(非精确股东变动明细),数据截至 2026-11-13(报告日期 2026-11-13)。
+- 产业资本: 股东增减持计数采用stock_notice_report 持股变动公告代理(非精确股东变动明细),数据截至 2026-11-17(报告日期 2026-11-17)。
 - 产业资本: 大宗交易市场统计尚未更新到当日。
 - 产业资本: 大宗交易个股明细接口今日不可用。
-- 普通散户: 沪市融资余额采用历史两融快照,数据截至 2026-11-12(报告日期 2026-11-13,滞后 1 个日历日)。
-- 普通散户: 沪市融资买入额采用历史两融快照,数据截至 2026-11-12(报告日期 2026-11-13,滞后 1 个日历日)。
-- 普通散户: 深市融资余额采用stock_margin_szse,数据截至 2026-11-11(报告日期 2026-11-13,滞后 2 个日历日)。
-- 普通散户: 深市融资买入额采用stock_margin_szse,数据截至 2026-11-11(报告日期 2026-11-13,滞后 2 个日历日)。
-- 普通散户: 资金流采用大盘资金流接口(全市场代理),数据截至 2026-11-12(报告日期 2026-11-13,滞后 1 个日历日)。
+- 普通散户: 沪市融资余额采用stock_margin_sse,数据截至 2026-11-13(报告日期 2026-11-17,滞后 4 个日历日)。
+- 普通散户: 沪市融资买入额采用stock_margin_sse,数据截至 2026-11-13(报告日期 2026-11-17,滞后 4 个日历日)。
+- 普通散户: 深市融资余额采用stock_margin_szse,数据截至 2026-11-13(报告日期 2026-11-17,滞后 4 个日历日)。
+- 普通散户: 深市融资买入额采用stock_margin_szse,数据截至 2026-11-13(报告日期 2026-11-17,滞后 4 个日历日)。
+- 普通散户: 资金流采用历史资金流快照,数据截至 2026-11-13(报告日期 2026-11-17,滞后 4 个日历日)。
 - 个股杠杆监测: 缺失:沪市成交额、深市成交额,市场整体杠杆水位无法计算。
-- 个股杠杆监测: 实时行情快照主源不可用,本次排行采用腾讯备用源(数据截至 2026-11-13)。
-- 个股杠杆监测: 个股两融明细缺失沪市,排行仅使用可用市场明细(数据截至 2026-11-11)。
+- 个股杠杆监测: 个股杠杆排行采用本地历史快照,数据截至 2026-11-11(报告日期 2026-11-17,滞后 6 个日历日)。
 
 **本次运行失败的数据源:**
-- stock_zh_index_hist_csindex: ConnectionError: ('Connection aborted.', ConnectionResetError(104, 'Connection reset by peer'))
+- tool_trade_date_hist_sina(akshare 无此接口)
+- stock_zh_index_hist_csindex(akshare 无此接口)
 - fund_etf_spot_em: HTTPError: 502 Server Error: Bad Gateway for url: https://push2delay.eastmoney.com/api/qt/clist/get?pn=1&pz=100&po=1&np=1&ut=bd1d9d
-- stock_zh_index_hist_csindex: ConnectionError: ('Connection aborted.', ConnectionResetError(104, 'Connection reset by peer'))
-- stock_sse_deal_daily: ConnectionError: HTTPSConnectionPool(host='query.sse.com.cn', port=443): Max retries exceeded with url: /commonQuery.do?sqlId=COMMON_SSE_
-- stock_szse_summary: AttributeError: 'float' object has no attribute 'replace'
+- stock_zh_index_hist_csindex(akshare 无此接口)
+- stock_sse_deal_daily(akshare 无此接口)
+- stock_szse_summary(akshare 无此接口)
 - stock_lhb_detail_em: TypeError: 'NoneType' object is not subscriptable
 - stock_lhb_hyyyb_em: TypeError: 'NoneType' object is not subscriptable
 - stock_ggcg_em: TimeoutError: 
 - stock_ggcg_em: TimeoutError: 
 - stock_dzjy_mrmx: TypeError: 'NoneType' object is not subscriptable
-- stock_margin_sse: ConnectionError: HTTPSConnectionPool(host='query.sse.com.cn', port=443): Max retries exceeded with url: /marketdata/tradedata/queryMargin
 - stock_margin_szse: ValueError: Length mismatch: Expected axis has 0 elements, new values have 6 elements
 - stock_margin_szse: ValueError: Length mismatch: Expected axis has 0 elements, new values have 6 elements
-- stock_individual_fund_flow_rank: JSONDecodeError: Expecting value: line 1 column 1 (char 0)
-- stock_margin_detail_sse: ConnectionError: HTTPSConnectionPool(host='query.sse.com.cn', port=443): Max retries exceeded with url: /marketdata/tradedata/queryMargin
-- stock_margin_detail_sse: ConnectionError: HTTPSConnectionPool(host='query.sse.com.cn', port=443): Max retries exceeded with url: /marketdata/tradedata/queryMargin
-- stock_margin_detail_sse: ConnectionError: HTTPSConnectionPool(host='query.sse.com.cn', port=443): Max retries exceeded with url: /marketdata/tradedata/queryMargin
+- stock_margin_szse: ValueError: Length mismatch: Expected axis has 0 elements, new values have 6 elements
+- stock_margin_szse: ValueError: Length mismatch: Expected axis has 0 elements, new values have 6 elements
+- stock_individual_fund_flow_rank(akshare 无此接口)
+- stock_market_fund_flow(akshare 无此接口)
+- stock_margin_detail_sse: ValueError: Length mismatch: Expected axis has 0 elements, new values have 13 elements
+- stock_margin_detail_sse: ValueError: Length mismatch: Expected axis has 0 elements, new values have 13 elements
+- stock_margin_detail_sse: ValueError: Length mismatch: Expected axis has 0 elements, new values have 13 elements
+- stock_margin_detail_sse: ValueError: Length mismatch: Expected axis has 0 elements, new values have 13 elements
 - stock_zh_a_spot_em: Push2RateLimitError: 东方财富 push2 行情服务器断开了连接，通常是短时间内请求过多，当前 IP 被临时限流。首次限流一般约 5 分钟后恢复，反复触发后可能需要 40 分钟以上；等待期间不要重复调用东方财富的行情接口，否则会延长限流。
-- stock_zh_index_hist_csindex: ConnectionError: ('Connection aborted.', ConnectionResetError(104, 'Connection reset by peer'))
+- stock_zh_index_hist_csindex(akshare 无此接口)
+- stock_zh_index_daily(akshare 无此接口)
+- stock_zh_index_daily_em(akshare 无此接口)
+- stock_zh_index_daily(akshare 无此接口)
+- stock_zh_index_daily_em(akshare 无此接口)
