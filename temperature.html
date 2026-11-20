@@ -1,0 +1,382 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A股市场温度</title>
+<style>
+:root {
+  color-scheme: light dark;
+  --page: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --sec: #52514e;
+  --mut: #898781; --grid: #e1e0d9; --axis: #c3c2b7;
+  --danger: #e34948; --safe: #2a78d6; --warn: #c98a1f; --neutral: #f0efec;
+  --line: #2a78d6; --line2: #b7b6ad; --ring: rgba(11,11,11,0.10);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --page: #0d0d0d; --surface: #1a1a19; --ink: #ffffff; --sec: #c3c2b7;
+    --grid: #2c2c2a; --axis: #383835;
+    --danger: #e66767; --safe: #3987e5; --warn: #d9a441; --neutral: #383835;
+    --line: #3987e5; --line2: #55544f; --ring: rgba(255,255,255,0.10);
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--ink);
+  font-family: system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; }
+.wrap { max-width: 760px; margin: 0 auto; padding: 24px 16px 48px; }
+.topnav { font-size: 13px; margin-bottom: 10px; }
+.topnav a { color: var(--safe); text-decoration: none; }
+h1 { font-size: 22px; margin: 0 0 4px; }
+.sub { color: var(--mut); font-size: 13px; margin-bottom: 18px; line-height: 1.6; }
+.card { background: var(--surface); border: 1px solid var(--ring); border-radius: 10px;
+  padding: 16px 18px; margin-bottom: 16px; }
+.card h2 { font-size: 15px; margin: 0 0 10px; }
+.card .hint { color: var(--mut); font-size: 12px; margin: -6px 0 10px; }
+
+/* ---- 顶部大分数 ---- */
+.hero { text-align: center; padding: 22px 18px 18px; }
+.heroTop { display: flex; justify-content: space-between; align-items: baseline; font-size: 13px; color: var(--mut); }
+.heroDelta { font-weight: 700; font-variant-numeric: tabular-nums; }
+.heroDelta.up { color: var(--danger); }
+.heroDelta.down { color: var(--safe); }
+.heroDelta.flat { color: var(--mut); }
+.heroScore { font-size: 64px; font-weight: 700; line-height: 1.1; margin-top: 8px; }
+.heroScore.muted { color: var(--mut); font-size: 40px; }
+.heroBand { font-size: 18px; font-weight: 600; margin-top: 2px; }
+.heroBand.muted { color: var(--mut); font-weight: 500; }
+.heroNote { font-size: 12.5px; color: var(--mut); margin-top: 10px; }
+.band-icebox .heroScore, .band-icebox .heroBand { color: var(--safe); }
+.band-cool .heroScore, .band-cool .heroBand { color: color-mix(in srgb, var(--safe) 65%, var(--sec)); }
+.band-neutral .heroScore, .band-neutral .heroBand { color: var(--ink); }
+.band-warm .heroScore, .band-warm .heroBand { color: var(--warn); }
+.band-hot .heroScore, .band-hot .heroBand { color: var(--danger); }
+
+.meter { margin: 18px auto 4px; max-width: 420px; }
+.meterTrack { position: relative; height: 10px; border-radius: 999px; overflow: visible; display: flex; }
+.meterZone { flex: 1; height: 100%; }
+.meterZone:first-child { border-top-left-radius: 999px; border-bottom-left-radius: 999px; }
+.meterZone:last-child { border-top-right-radius: 999px; border-bottom-right-radius: 999px; }
+.zone-icebox { background: color-mix(in srgb, var(--safe) 32%, var(--neutral)); }
+.zone-cool { background: color-mix(in srgb, var(--safe) 15%, var(--neutral)); }
+.zone-neutral { background: var(--neutral); }
+.zone-warm { background: color-mix(in srgb, var(--warn) 20%, var(--neutral)); }
+.zone-hot { background: color-mix(in srgb, var(--danger) 32%, var(--neutral)); }
+.meterPointer { position: absolute; top: -4px; width: 3px; height: 18px; border-radius: 2px;
+  background: var(--ink); box-shadow: 0 0 0 2px var(--surface); }
+.band-icebox .meterPointer { background: var(--safe); }
+.band-cool .meterPointer { background: color-mix(in srgb, var(--safe) 65%, var(--sec)); }
+.band-warm .meterPointer { background: var(--warn); }
+.band-hot .meterPointer { background: var(--danger); }
+.meterLabels { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--mut); margin-top: 5px; }
+
+/* ---- 分项卡片 ---- */
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 620px) { .grid2 { grid-template-columns: 1fr; } }
+.result { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.result.cols3 { grid-template-columns: repeat(3, 1fr); }
+@media (max-width: 380px) { .result.cols3 { grid-template-columns: 1fr 1fr; } }
+.stat { background: var(--page); border: 1px solid var(--ring); border-radius: 8px; padding: 9px 10px; }
+.stat .k { font-size: 12px; color: var(--mut); display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+.stat .v { font-size: 17px; font-weight: 700; margin-top: 3px; font-variant-numeric: tabular-nums; }
+.stat .v.muted { color: var(--mut); font-size: 14px; font-weight: 500; }
+.stat .v.up { color: var(--danger); }
+.stat .v.down { color: var(--safe); }
+.tag { display: inline-block; padding: 1px 6px; border-radius: 999px; font-size: 10px; font-weight: 600;
+  white-space: nowrap; }
+.tag.pct { background: color-mix(in srgb, var(--axis) 30%, transparent); color: var(--sec); }
+.tag.warn { background: color-mix(in srgb, var(--warn) 18%, transparent); color: var(--warn); }
+
+/* ---- 历史曲线 ---- */
+.filters { display: flex; gap: 8px; margin: 0 0 10px; flex-wrap: wrap; }
+.filters button { border: 1px solid var(--ring); background: var(--surface); color: var(--sec);
+  border-radius: 999px; padding: 5px 14px; font-size: 13px; cursor: pointer; }
+.filters button.on { color: var(--ink); font-weight: 600; border-color: var(--axis); }
+.filters button:hover { background: var(--neutral); }
+.legend { display: flex; gap: 16px; font-size: 12px; color: var(--sec); margin: -2px 0 8px; }
+.legend span { display: inline-flex; align-items: center; gap: 5px; }
+.legend i { width: 14px; height: 2px; border-radius: 1px; display: inline-block; }
+.legend i.score { background: var(--line); height: 3px; }
+.legend i.ma { background: var(--line2); }
+svg { display: block; width: 100%; height: auto; }
+svg text { font-family: inherit; fill: var(--ink); }
+.tt { position: fixed; pointer-events: none; background: var(--surface); color: var(--ink);
+  border: 1px solid var(--ring); border-radius: 8px; padding: 8px 10px; font-size: 12px;
+  box-shadow: 0 4px 14px rgba(0,0,0,.12); max-width: 260px; display: none; z-index: 9; line-height: 1.6; }
+.tt b { font-size: 12.5px; }
+.empty { color: var(--mut); font-size: 13px; padding: 20px 0; text-align: center; }
+.foot { color: var(--mut); font-size: 12px; line-height: 1.7; }
+a { color: var(--safe); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topnav"><a href="index.html">← 返回资金动向看板</a></div>
+  <h1>A股市场温度</h1>
+  <div class="sub">每个交易日收盘后,把涨跌家数、涨停炸板、成交量能、三大指数换算成近 250 个交易日的
+    历史分位数,加权合成一个 0–100 的市场温度分。客观统计,不代表操作建议。</div>
+
+  <div class="card hero" id="hero">
+    <div class="heroTop"><span id="heroDate">--</span><span id="heroDelta"></span></div>
+    <div class="heroScore" id="heroScore">--</div>
+    <div class="heroBand" id="heroBand">加载中…</div>
+    <div class="meter" id="meterBox" hidden>
+      <div class="meterTrack">
+        <div class="meterZone zone-icebox"></div><div class="meterZone zone-cool"></div>
+        <div class="meterZone zone-neutral"></div><div class="meterZone zone-warm"></div>
+        <div class="meterZone zone-hot"></div>
+        <div class="meterPointer" id="meterPointer"></div>
+      </div>
+      <div class="meterLabels"><span>冰点</span><span>偏冷</span><span>中性</span><span>偏热</span><span>过热</span></div>
+    </div>
+    <div class="heroNote" id="heroNote"></div>
+  </div>
+
+  <div class="grid2" id="cards"></div>
+
+  <div class="card">
+    <h2>历史评分</h2>
+    <div class="filters" id="range">
+      <button data-n="60" class="on">近60日</button>
+      <button data-n="250">近250日</button>
+      <button data-n="0">全部</button>
+    </div>
+    <div class="legend"><span><i class="score"></i>当日评分</span><span><i class="ma"></i>5日均线</span></div>
+    <div id="trendChart"></div>
+  </div>
+
+  <div class="card foot">
+    数据来源:东方财富涨停/跌停/炸板/昨日涨停池、乐咕赚钱效应、沪深交易所官方成交概况、中证指数网/新浪指数行情。
+    单项指标当日缺失时按剩余指标权重归一化合成总分,大面积缺失时当日不出分(历史曲线留断点),
+    不会用前一日数据冒充当日。评分只反映市场情绪温度,<b>不构成任何投资建议</b>。
+  </div>
+</div>
+<div class="tt" id="tt"></div>
+<script>
+const NS = "http://www.w3.org/2000/svg";
+const $ = id => document.getElementById(id);
+const cssVar = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const el = (tag, attrs, parent) => {
+  const e = document.createElementNS(NS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(e);
+  return e;
+};
+const tt = $("tt");
+function showTT(html, ev) {
+  tt.innerHTML = html; tt.style.display = "block";
+  const w = tt.offsetWidth, h = tt.offsetHeight;
+  let x = ev.clientX + 14, y = ev.clientY + 14;
+  if (x + w > innerWidth - 8) x = ev.clientX - w - 14;
+  if (y + h > innerHeight - 8) y = ev.clientY - h - 14;
+  tt.style.left = x + "px"; tt.style.top = y + "px";
+}
+const hideTT = () => tt.style.display = "none";
+
+const BAND_CLASS = { "冰点": "band-icebox", "偏冷": "band-cool", "中性": "band-neutral",
+                     "偏热": "band-warm", "过热": "band-hot" };
+
+const METRICS = {
+  adv_ratio:        { label: "上涨占比",         fmt: v => (v*100).toFixed(1)+"%" },
+  limit_up:         { label: "涨停家数",         fmt: v => v.toFixed(0)+" 只" },
+  limit_down:       { label: "跌停家数",         fmt: v => v.toFixed(0)+" 只" },
+  boards_ge2:       { label: "连板家数(≥2板)",   fmt: v => v.toFixed(0)+" 只" },
+  max_board:        { label: "最高连板",         fmt: v => v.toFixed(0)+" 板" },
+  seal_rate:        { label: "涨停封板率",       fmt: v => (v*100).toFixed(1)+"%" },
+  yesterday_zt_ret:  { label: "昨日涨停今日均涨", fmt: v => (v>=0?"+":"")+v.toFixed(2)+"%" },
+  turnover_yuan:    { label: "两市成交额",       fmt: v => (v/1e8).toFixed(0)+" 亿" },
+  turnover_vs_5d:   { label: "较5日均额",        fmt: v => (v*100).toFixed(0)+"%" },
+  sh_chg:           { label: "上证指数",         fmt: v => (v>=0?"+":"")+v.toFixed(2)+"%" },
+  sz_chg:           { label: "深证成指",         fmt: v => (v>=0?"+":"")+v.toFixed(2)+"%" },
+  cyb_chg:          { label: "创业板指",         fmt: v => (v>=0?"+":"")+v.toFixed(2)+"%" },
+};
+const CARDS = [
+  { title: "涨跌家数与涨跌停", keys: ["adv_ratio", "limit_up", "limit_down"] },
+  { title: "连板", keys: ["boards_ge2", "max_board"] },
+  { title: "打板情绪", keys: ["seal_rate", "yesterday_zt_ret"] },
+  { title: "成交量能", keys: ["turnover_yuan", "turnover_vs_5d"] },
+  { title: "三大指数涨跌幅", keys: ["sh_chg", "sz_chg", "cyb_chg"] },
+];
+
+const SIGNED_METRICS = new Set(["yesterday_zt_ret", "sh_chg", "sz_chg", "cyb_chg"]);
+function statHTML(day, key) {
+  const m = METRICS[key], v = day.raw[key], p = day.pct[key];
+  const low = (day.low_sample || []).includes(key);
+  let badge = "";
+  if (p !== undefined) badge = `<span class="tag pct">分位${Math.round(p)}</span>`;
+  if (low) badge += `<span class="tag warn">样本不足</span>`;
+  if (v === null || v === undefined) {
+    return `<div class="stat"><div class="k">${m.label}${badge}</div><div class="v muted">暂缺</div></div>`;
+  }
+  const cls = SIGNED_METRICS.has(key) ? (v > 0 ? "up" : v < 0 ? "down" : "") : "";
+  return `<div class="stat"><div class="k">${m.label}${badge}</div><div class="v ${cls}">${m.fmt(v)}</div></div>`;
+}
+
+function renderCards(day) {
+  const box = $("cards"); box.innerHTML = "";
+  CARDS.forEach(c => {
+    const card = document.createElement("div"); card.className = "card";
+    const cols = c.keys.length >= 3 ? "cols3" : "";
+    card.innerHTML = `<h2>${c.title}</h2><div class="result ${cols}">${c.keys.map(k => statHTML(day, k)).join("")}</div>`;
+    box.appendChild(card);
+  });
+}
+
+function renderHero(days) {
+  const hero = $("hero");
+  const today = days[days.length - 1];
+  $("heroDate").textContent = today.date;
+
+  if (today.score === null) {
+    hero.className = "card hero band-neutral";
+    $("heroScore").className = "heroScore muted"; $("heroScore").textContent = "--";
+    $("heroBand").className = "heroBand muted"; $("heroBand").textContent = "今日数据缺失";
+    $("heroDelta").textContent = "";
+    $("meterBox").hidden = true;
+    $("heroNote").textContent = "多项核心指标当日采集失败,按规则不合成总分,详见下方分项卡片。";
+    return;
+  }
+
+  const cls = BAND_CLASS[today.band] || "band-neutral";
+  hero.className = "card hero " + cls;
+  $("heroScore").className = "heroScore"; $("heroScore").textContent = today.score.toFixed(1).replace(/\.0$/, "");
+  $("heroBand").className = "heroBand"; $("heroBand").textContent = today.band;
+
+  const prev = days.length > 1 ? days[days.length - 2] : null;
+  const deltaEl = $("heroDelta");
+  if (prev && prev.score !== null) {
+    const d = today.score - prev.score;
+    const dir = d > 0.05 ? "up" : d < -0.05 ? "down" : "flat";
+    const arrow = dir === "up" ? "▲" : dir === "down" ? "▼" : "→";
+    deltaEl.className = "heroDelta " + dir;
+    deltaEl.textContent = `${arrow} ${d >= 0 ? "+" : ""}${d.toFixed(1)} 较上一交易日`;
+  } else {
+    deltaEl.textContent = "";
+  }
+
+  $("meterBox").hidden = false;
+  $("meterPointer").style.left = `calc(${Math.max(0, Math.min(100, today.score))}% - 1.5px)`;
+
+  const notes = [];
+  if (today.warm_up) notes.push("建仓期(上线不足20个交易日),分数参考性有限");
+  if (today.missing && today.missing.length) notes.push(`${today.missing.length}项指标当日缺失,已按权重归一化合成`);
+  $("heroNote").textContent = notes.join(" · ");
+}
+
+// ---- 历史曲线(截至当日评分 + 5日均线,断点表示当日不出分)----
+function movingAvg(days, n) {
+  const scored = [];
+  return days.map(d => {
+    if (d.score !== null) scored.push(d.score);
+    if (scored.length < n) return null;
+    const w = scored.slice(-n);
+    return w.reduce((a,b)=>a+b, 0) / w.length;
+  });
+}
+function buildSegments(values, X, Y) {
+  const segs = []; let cur = [];
+  values.forEach((v, i) => {
+    if (v === null || v === undefined) { if (cur.length > 1) segs.push(cur); cur = []; }
+    else cur.push([X(i), Y(v)]);
+  });
+  if (cur.length > 1) segs.push(cur);
+  return segs;
+}
+function drawTrend(allDays, rangeN) {
+  const box = $("trendChart"); box.innerHTML = "";
+  const days = rangeN ? allDays.slice(-rangeN) : allDays;
+  if (days.length < 2) { box.innerHTML = '<div class="empty">历史数据不足,暂无法画图</div>'; return; }
+
+  const ma5 = movingAvg(allDays, 5).slice(allDays.length - days.length);
+  const scores = days.map(d => d.score);
+
+  const W = 680, H = 260, left = 34, right = 12, top = 10, bot = 26;
+  const svg = el("svg", { viewBox: `0 0 ${W} ${H}` }, box);
+  const X = i => left + (W-left-right) * (days.length === 1 ? .5 : i / (days.length-1));
+  const Y = v => top + (H-top-bot) * (1 - v/100);
+
+  // 温度分区背景 + 网格线(0/20/40/60/80/100 与档位边界重合)
+  const zoneColors = ["--danger", "--warn", null, "--safe", "--safe"];
+  const zoneOpac   = [0.10, 0.09, 0, 0.07, 0.14];
+  [80,60,40,20,0].forEach((y0, idx) => {
+    if (zoneColors[idx]) {
+      el("rect", { x:left, y:Y(y0+20), width:W-left-right, height:Y(y0)-Y(y0+20),
+        fill: cssVar(zoneColors[idx]), opacity: zoneOpac[idx] }, svg);
+    }
+  });
+  [0,20,40,60,80,100].forEach(v => {
+    const y = Y(v);
+    el("line", { x1:left, y1:y, x2:W-right, y2:y, stroke: cssVar("--grid"), "stroke-width":1 }, svg);
+    const t = el("text", { x:left-6, y:y+3, "text-anchor":"end", "font-size":10, fill: cssVar("--mut") }, svg);
+    t.textContent = v;
+  });
+
+  buildSegments(ma5, X, Y).forEach(pts => {
+    el("polyline", { points: pts.map(p=>p.join(",")).join(" "), fill:"none",
+      stroke: cssVar("--line2"), "stroke-width":2, "stroke-linejoin":"round", "stroke-linecap":"round" }, svg);
+  });
+  buildSegments(scores, X, Y).forEach(pts => {
+    el("polyline", { points: pts.map(p=>p.join(",")).join(" "), fill:"none",
+      stroke: cssVar("--line"), "stroke-width":2.5, "stroke-linejoin":"round", "stroke-linecap":"round" }, svg);
+  });
+  const lastIdx = [...scores].map((v,i)=>[v,i]).filter(([v])=>v!==null).pop();
+  if (lastIdx) el("circle", { cx:X(lastIdx[1]), cy:Y(lastIdx[0]), r:4.5,
+    fill: cssVar("--line"), stroke: cssVar("--surface"), "stroke-width":2 }, svg);
+
+  const d0 = el("text", { x:left, y:H-8, "font-size":10, fill: cssVar("--mut") }, svg);
+  d0.textContent = days[0].date;
+  const d1 = el("text", { x:W-right, y:H-8, "text-anchor":"end", "font-size":10, fill: cssVar("--mut") }, svg);
+  d1.textContent = days[days.length-1].date;
+
+  const cross = el("line", { y1:top, y2:H-bot, stroke: cssVar("--axis"), "stroke-width":1, visibility:"hidden" }, svg);
+  const mark = el("circle", { r:4.5, fill: cssVar("--line"), stroke: cssVar("--surface"), "stroke-width":2, visibility:"hidden" }, svg);
+  const hit = el("rect", { x:left, y:top, width:W-left-right, height:H-top-bot, fill:"transparent" }, svg);
+  hit.addEventListener("pointermove", ev => {
+    const r = svg.getBoundingClientRect();
+    const px = (ev.clientX - r.left) * (W / r.width);
+    let i = Math.round((px-left) / ((W-left-right) / Math.max(days.length-1,1)));
+    i = Math.max(0, Math.min(days.length-1, i));
+    cross.setAttribute("x1", X(i)); cross.setAttribute("x2", X(i)); cross.setAttribute("visibility","visible");
+    const day = days[i];
+    if (day.score !== null) {
+      mark.setAttribute("cx", X(i)); mark.setAttribute("cy", Y(day.score)); mark.setAttribute("visibility","visible");
+    } else {
+      mark.setAttribute("visibility","hidden");
+    }
+    const maV = ma5[i];
+    let html = `<b>${day.date} · ${day.band || "今日数据缺失"}</b><br>`;
+    html += day.score !== null ? `评分 ${day.score.toFixed(1)}` : "评分 —";
+    html += maV !== null && maV !== undefined ? `<br>5日均线 ${maV.toFixed(1)}` : "";
+    if (day.missing && day.missing.length) html += `<br><span style="color:${cssVar('--mut')}">缺失 ${day.missing.length} 项指标</span>`;
+    showTT(html, ev);
+  });
+  hit.addEventListener("pointerleave", () => { cross.setAttribute("visibility","hidden"); mark.setAttribute("visibility","hidden"); hideTT(); });
+}
+
+let RANGE = 60, DAYS = [];
+function redraw() { drawTrend(DAYS, RANGE); }
+$("range").addEventListener("click", ev => {
+  const b = ev.target.closest("button"); if (!b) return;
+  RANGE = +b.dataset.n;
+  document.querySelectorAll("#range button").forEach(x => x.classList.toggle("on", x === b));
+  redraw();
+});
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", redraw);
+
+fetch("temperature_data.json").then(r => r.json()).then(data => {
+  DAYS = data.days || [];
+  if (!DAYS.length) {
+    $("heroBand").textContent = "暂无数据";
+    $("cards").innerHTML = "";
+    $("trendChart").innerHTML = '<div class="empty">暂无历史数据,可能是尚未跑过第一次采集</div>';
+    return;
+  }
+  renderHero(DAYS);
+  renderCards(DAYS[DAYS.length - 1]);
+  redraw();
+}).catch(() => {
+  $("heroBand").textContent = "加载失败";
+  $("heroNote").textContent = "temperature_data.json 加载失败(可能是离线打开本页,或数据尚未生成)。";
+});
+</script>
+</body>
+</html>
